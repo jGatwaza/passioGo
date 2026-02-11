@@ -1,0 +1,72 @@
+/* Existing styles */
+.custom-stop-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stop-marker-inner {
+  width: 40px;
+  height: 22px;
+  background-color: white;
+  border-radius: 100%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ccc;
+}
+
+.stop-marker-center {
+  width: 15px;
+  height: 15px;
+  background-color: #e310d2;
+  /* Harvard Crimson */
+  border-radius: 50%;
+}
+
+/* Tooltip Styles */
+.leaflet-tooltip.custom-stop-tooltip {
+  background-color: #2c2c2e;
+  /* Dark iOS style */
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Override Leaflet's default tooltip arrow color */
+.leaflet-tooltip-top.custom-stop-tooltip::before {
+  border-top-color: #2c2c2e;
+}
+
+.tooltip-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #007AFF;
+  /* iOS Blue */
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: serif;
+  /* For the 'i' look */
+  font-style: italic;
+}
+
+.stop-name {
+  white-space: nowrap;
+}
