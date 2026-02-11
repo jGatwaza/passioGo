@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from gtfs_data import load_static_data, get_scheduled_time
+from gtfs_data import load_static_data, get_best_scheduled_time
 from realtime import fetch_realtime_updates, parse_time, determine_status_color
 from datetime import datetime, timedelta
 import threading
@@ -8,7 +8,7 @@ import time
 
 app = FastAPI()
 
-# Allow CORS for frontend
+# allow CORS for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global state for static data
+# global state for static data
 static_schedule = None
 trip_route_map = None
 
@@ -39,14 +39,14 @@ def get_stop_status(stop_id: str):
     if static_schedule is None:
         raise HTTPException(status_code=503, detail="Static data not loaded")
 
-    # Fetch Realtime Updates
+    # fetch realtime updates
     realtime_data = fetch_realtime_updates()
     if not realtime_data or 'entity' not in realtime_data:
         raise HTTPException(status_code=502, detail="Failed to fetch realtime data")
 
     buses = []
     
-    # Process entities
+    # process entities
     for entity in realtime_data['entity']:
         trip_update = entity.get('trip_update')
         if not trip_update:
@@ -55,7 +55,7 @@ def get_stop_status(stop_id: str):
         trip_id = trip_update.get('trip', {}).get('trip_id')
         stop_time_updates = trip_update.get('stop_time_update', [])
         
-        # Find update for this stop
+        # find update for this stop
         target_update = None
         for update in stop_time_updates:
             if update.get('stop_id') == stop_id:
@@ -65,7 +65,7 @@ def get_stop_status(stop_id: str):
         if not target_update:
             continue
             
-        # Get Realtime Arrival
+        # get realtime arrival
         arrival = target_update.get('arrival')
         if not arrival or 'time' not in arrival:
             continue
@@ -74,47 +74,50 @@ def get_stop_status(stop_id: str):
         stop_sequence = target_update.get('stop_sequence') # Extract sequence
         eta_dt = datetime.fromtimestamp(predicted_unix)
         
-        # Get Scheduled Time
-        scheduled_time_str = get_scheduled_time(trip_id, stop_id, static_schedule, stop_sequence)
+        # get scheduled time (time-based matching)
+        scheduled_time_str = get_best_scheduled_time(trip_id, stop_id, eta_dt, static_schedule)
+        
+        # debug logging
+        print(f"[DEBUG] Trip: {trip_id}, ETA: {eta_dt} -> Scheduled: {scheduled_time_str}", flush=True)
         
         status = "Scheduled"
         color = "Gray" # Default ETA color
         delta = 0
         
-        # Determine Status (Lateness)
+        # determine status (lateness)
         if scheduled_time_str:
             scheduled_dt = parse_time(scheduled_time_str)
             if scheduled_dt:
                 delta = (eta_dt - scheduled_dt).total_seconds()
                 status, color = determine_status_color(delta)
         else:
-            # Trip exists in realtime but not in static at this time
+            # trip exists in realtime but not in static at this time
             status = "Added" 
             color = "#3498db" # Default Blue for added/live trips without schedule
 
-        # Get Route Info
+        # get route info
         route_info = trip_route_map.get(trip_id, {})
         route_name = route_info.get("long_name") or route_info.get("short_name") or "Unknown Route"
         route_badge = route_info.get("short_name") or "Bus"
         route_color = route_info.get("color") or "#e310d2"
         
-        # Get Vehicle Label
+        # get vehicle label
         vehicle_label = entity.get('trip_update', {}).get('vehicle', {}).get('label', 'Unknown')
         
-        # Calculate ETA in minutes from now
+        # calculate ETA in minutes from now
         now = datetime.now()
         minutes_away = int((eta_dt - now).total_seconds() / 60)
         
-        # Display even if negative? Usually hide if too far past.
-        # Let's show everything > -2 mins for now to be safe.
+        # display even if negative? Usually hide if too far past.
+        # let's show everything > -2 mins for now to be safe.
         if minutes_away < -2:
-            continue # Bus has passed
+            continue # bus has passed
 
-        # Format Scheduled Time
+        # format scheduled time
         formatted_schedule = None
         if scheduled_time_str:
             try:
-                # Handle HH:MM:SS even if HH > 23 (GTFS valid)
+                # handle HH:MM:SS even if HH > 23 (GTFS valid)
                 h, m, s = map(int, scheduled_time_str.split(':'))
                 if h >= 24: h -= 24
                 # Create dummy dt for formatting
@@ -131,12 +134,12 @@ def get_stop_status(stop_id: str):
             "scheduled_time": formatted_schedule, 
             "eta_min": minutes_away if minutes_away >= 0 else 0,
             "status": status,
-            "color": color, # This calculates ETA text color (Green/Red/etc)
-            "route_color": route_color, # This is the BRANDING color for the line
+            "color": color, # this calculates ETA text color (Green/Red/etc)
+            "route_color": route_color, # this is the branding color for the line
             "delta_sec": delta
         })
     
-    # Sort by ETA
+    # sort by ETA
     buses.sort(key=lambda x: x['eta_min'])
     
     return {

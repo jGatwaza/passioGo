@@ -6,7 +6,6 @@
     height: 100dvh;
     z-index: 1000;
     pointer-events: none;
-    /* Crucial: lets clicks pass to map */
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -22,7 +21,23 @@
     box-sizing: border-box;
     pointer-events: auto;
     animation: slideUp 0.3s ease-out;
-    padding-bottom: 40px;
+    padding-bottom: 20px;
+    max-height: 70dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.bus-sheet-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.bus-sheet-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.bus-sheet-container::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
 }
 
 @keyframes slideUp {
@@ -59,27 +74,21 @@
 
 .bus-item-left {
     flex: 4;
-    /* Allows it to take up ~75% */
     background-color: #e310d2;
-    /* User's requested purple/pink */
     padding: 25px;
-    /* Add padding back inside the colored area */
     display: flex;
     align-items: center;
     color: white;
-    /* changing text to white for better contrast on purple */
 }
 
 .bus-item-right {
     flex: 1;
-    /* ~25% */
     background-color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 10px;
     border-right: 5px solid #e310d2;
-    /* Right border matching the left side color */
 }
 
 .bus-icon-container {
@@ -91,11 +100,9 @@
 
 .bus-icon-img {
     width: 32px;
-    /* Adjust based on trip.png actual size needs */
     height: auto;
     object-fit: contain;
     filter: brightness(0) invert(1);
-    /* Make icon white if it's black, to match the theme */
 }
 
 .bus-info {
@@ -112,7 +119,6 @@
 .route-badge {
     background-color: white;
     color: #e310d2;
-    /* Match the bg color */
     border: none;
     border-radius: 4px;
     padding: 2px 4px;
@@ -121,23 +127,17 @@
     line-height: 1;
 }
 
-/* User's screenshot likely had a white box with colored letters or colored box with white letters. 
-   Assuming standard Passio generic style: often a colored square. 
-   Let's try to match "Crimson Cruiser" (CC). 
-   I will make it a white box with generic border for now, or match the screenshot colors if I could see them clearly.
-   I'll stick to a clean look.
-*/
+
 
 .bus-name {
     font-weight: 600;
     font-size: 1.1rem;
     color: white;
-    /* Contrast */
+    
 }
 
 .bus-route {
     color: rgba(255, 255, 255, 0.9);
-    /* Subtitle contrast */
     font-size: 0.9rem;
 }
 
@@ -145,7 +145,6 @@
     font-size: 1.5rem;
     font-weight: 700;
     color: #007AFF;
-    /* Blue accent for ETA, or keep standard */
     text-align: center;
     display: flex;
     flex-direction: column;

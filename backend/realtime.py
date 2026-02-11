@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timedelta
 import pandas as pd
 
-# Provided Realtime URL
+# realtime URL
 REALTIME_URL = "https://passio3.com/harvard/passioTransit/gtfs/realtime/tripUpdates.json"
 
 def fetch_realtime_updates():
@@ -35,7 +35,7 @@ def parse_time(time_str):
     seconds = int(parts[2])
     
     now = datetime.now()
-    # Base calculation
+    # base calculation
     day_offset = 0
     if hours >= 24:
         hours -= 24
@@ -69,17 +69,17 @@ def process_trip_update(entity_update, scheduled_time_str):
     if not scheduled_time_str:
         return None
     
-    # Extract prediction time (Unix timestamp)
-    # Finding relevant stop time update. Assuming we are looking at the *closest* stop match
-    # For MVP, let's just use the first stop_time_update available or specific one if needed.
-    # In full implementation, we'd loop through to find the specific stop_id we care about.
+    # extract prediction time (Unix timestamp)
+    # finding relevant stop time update. Assuming we are looking at the *closest* stop match
+    # for MVP, let's just use the first stop_time_update available or specific one if needed.
+    # in full implementation, we'd loop through to find the specific stop_id we care about.
     
     stop_updates = entity_update.get('trip_update', {}).get('stop_time_update', [])
     if not stop_updates:
         return None
 
-    # Let's say we are looking for a specific stop_id pass-through logic
-    # For demo, taking the first valid arrival time
+    # let's say we are looking for a specific stop_id pass-through logic
+    # for demo, taking the first valid arrival time
     predicted_unix = None
     stop_id = None
     
@@ -99,12 +99,12 @@ def process_trip_update(entity_update, scheduled_time_str):
     if not scheduled_dt:
         return None
 
-    # Calculate delta
+    # calculate delta
     delta = (eta_dt - scheduled_dt).total_seconds()
     
     status, color = determine_status_color(delta)
     
-    # Extract vehicle label (Bus Number)
+    # extract vehicle label (Bus Number)
     vehicle_label = entity_update.get('trip_update', {}).get('vehicle', {}).get('label')
     if not vehicle_label:
         vehicle_label = "Unknown"
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     updates = fetch_realtime_updates()
     if updates and 'entity' in updates:
         print(f"Fetched {len(updates['entity'])} entities.")
-        # Test logic with dummy scheduled time
+        # test logic with dummy scheduled time
         dummy_sched = "22:30:00" # arbitrary
         result = process_trip_update(updates['entity'][0], dummy_sched)
         print("Sample processing:", result)

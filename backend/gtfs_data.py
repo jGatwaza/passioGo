@@ -2,7 +2,6 @@ import pandas as pd
 import os
 from datetime import datetime
 
-# Paths to GTFS files
 STATIC_GTFS_DIR = "../static gtfs"
 
 def load_static_data():
@@ -13,30 +12,21 @@ def load_static_data():
     """
     print("Loading Static GTFS data...")
     
-    # Load stop_times.txt
     stop_times_path = os.path.join(STATIC_GTFS_DIR, "stop_times.txt")
     stop_times_df = pd.read_csv(stop_times_path, dtype={'trip_id': str, 'stop_id': str})
     
-    # Filter for relevant columns
-    # We need trip_id, stop_id, arrival_time (and possibly stop_sequence)
-    # Check if stop_sequence exists in checking columns, if not, loading without it
-    # But usually it does. Safely assume it does for standard GTFS.
     cols = ['trip_id', 'stop_id', 'arrival_time']
     if 'stop_sequence' in stop_times_df.columns:
         cols.append('stop_sequence')
         
     schedule_df = stop_times_df[cols].copy()
     
-    # Load routes.txt
     routes_path = os.path.join(STATIC_GTFS_DIR, "routes.txt")
     routes_df = pd.read_csv(routes_path, dtype={'route_id': str, 'route_color': str, 'route_text_color': str})
     
-    # Load trips.txt
     trips_path = os.path.join(STATIC_GTFS_DIR, "trips.txt")
     trips_df = pd.read_csv(trips_path, dtype={'trip_id': str, 'route_id': str})
     
-    # Create Trip -> Route Map
-    # Join trips with routes
     trips_with_routes = pd.merge(trips_df, routes_df, on='route_id', how='left')
     
     trip_route_map = {}
@@ -52,28 +42,50 @@ def load_static_data():
     print(f"Loaded {len(schedule_df)} stop times and {len(trip_route_map)} trips.")
     return schedule_df, trip_route_map
 
-def get_scheduled_time(trip_id, stop_id, schedule_df, stop_sequence=None):
+def get_best_scheduled_time(trip_id, stop_id, eta_dt, schedule_df):
     """
-    Look up the scheduled arrival time for a given trip, stop, and optional sequence.
-    Returns: string "HH:MM:SS" or None
+    Finds the scheduled arrival time closest to the estimated arrival time (eta_dt).
+    This ignores stop_sequence if provided, as it can be unreliable.
     """
-    # Base mask
     mask = (schedule_df['trip_id'] == str(trip_id)) & (schedule_df['stop_id'] == str(stop_id))
+    matches = schedule_df[mask].copy()
     
-    if stop_sequence is not None and 'stop_sequence' in schedule_df.columns:
-        # Try to match exact sequence
-        seq_mask = mask & (schedule_df['stop_sequence'].astype(str) == str(stop_sequence))
-        match = schedule_df[seq_mask]
-        if not match.empty:
-            return match.iloc[0]['arrival_time']
+    if matches.empty:
+        return None
+        
+    # convert arrival_time strings to datetime objects for comparison
+    # ETA is a datetime. matching arrival_time ("HH:MM:SS") needs care (overnight etc).
     
-    # Fallback or if stop_sequence not provided/found
-    match = schedule_df[mask]
+    def parse_to_dt(time_str):
+        try:
+            h, m, s = map(int, time_str.split(':'))
+            # handle > 24 hours (e.g. 25:30)
+            day_offset = 0
+            if h >= 24:
+                h -= 24
+                day_offset = 1
+                
+            # use eta_dt's date as baseline
+            base_date = eta_dt.date()
+            return datetime(base_date.year, base_date.month, base_date.day, h, m, s)
+        except:
+            return None
+
+    best_match_time = None
+    min_diff = float('inf')
     
-    if not match.empty:
-        # If multiple matches (loop) and no sequence matched, return first
-        return match.iloc[0]['arrival_time']
-    return None
+    for _, row in matches.iterrows():
+        sched_time_str = row['arrival_time']
+        sched_dt = parse_to_dt(sched_time_str)
+        
+        if sched_dt:
+            # calculate absolute difference in seconds
+            diff = abs((eta_dt - sched_dt).total_seconds())
+            if diff < min_diff:
+                min_diff = diff
+                best_match_time = sched_time_str
+                
+    return best_match_time
 
 if __name__ == "__main__":
     # Test loading

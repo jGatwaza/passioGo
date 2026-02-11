@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import StopMarker from './StopMarker';
 
-// Harvard/Radcliffe Quad interactions
+//marker positioning
 const CENTER_POSITION = [42.3800, -71.1250];
 
 const MapClickHandler = ({ onMapClick }) => {
