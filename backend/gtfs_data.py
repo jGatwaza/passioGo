@@ -29,6 +29,11 @@ def load_static_data():
     trips_path = os.path.join(STATIC_GTFS_DIR, "trips.txt")
     trips_df = pd.read_csv(trips_path, dtype={'trip_id': str, 'route_id': str, 'service_id': str})
 
+    # Enrich schedule with route_id so lookups can be filtered per route
+    schedule_df = schedule_df.merge(
+        trips_df[['trip_id', 'route_id']], on='trip_id', how='left'
+    )
+
     trips_with_routes = pd.merge(trips_df, routes_df, on='route_id', how='left')
 
     trip_route_map = {}
@@ -212,7 +217,7 @@ def fmt_time(time_str):
         return time_str
 
 
-def get_stop_schedule_context(stop_id, eta_dt, schedule_today, full_schedule=None):
+def get_stop_schedule_context(stop_id, route_id, eta_dt, schedule_today, full_schedule=None):
     """
     The canonical schedule lookup.  Schedules belong to stops, not individual
     buses — the timetable for a stop is the source of truth.
@@ -238,10 +243,11 @@ def get_stop_schedule_context(stop_id, eta_dt, schedule_today, full_schedule=Non
       context        – {"past": fmt, "current": fmt, "next": fmt}
       delta_sec      – (eta_dt − scheduled_dt).total_seconds(); 0 if no match
     """
-    base = eta_dt.date()
+    now  = datetime.now()
+    base = now.date()
 
     def _build_times(df):
-        rows = df[df['stop_id'] == str(stop_id)]
+        rows = df[(df['stop_id'] == str(stop_id)) & (df['route_id'] == str(route_id))]
         seen = {}
         for ts in rows['arrival_time']:
             if ts not in seen:
@@ -252,34 +258,29 @@ def get_stop_schedule_context(stop_id, eta_dt, schedule_today, full_schedule=Non
 
     times = _build_times(schedule_today)
 
-    # Fall back to full schedule if today's slice has < 2 slots (stop
-    # is served by a recently-expired service that's still in the realtime feed)
+    # Fall back to full schedule when today's slice is too sparse
     if len(times) < 2 and full_schedule is not None:
         times = _build_times(full_schedule)
 
     if not times:
         return None, {"past": None, "current": None, "next": None}, 0
 
-    # Match: closest scheduled slot to the bus’s ETA
-    best_idx = min(
-        range(len(times)),
-        key=lambda i: abs((times[i][1] - eta_dt).total_seconds())
+    # Anchor: first scheduled time >= NOW -- stable across polls.
+    current_idx = next(
+        (i for i, (_, dt) in enumerate(times) if dt >= now),
+        len(times) - 1
     )
 
-    scheduled_raw, scheduled_dt = times[best_idx]
+    scheduled_raw, scheduled_dt = times[current_idx]
     delta_sec = (eta_dt - scheduled_dt).total_seconds()
 
-    # Sanity cap: if no slot is within 45 minutes the match is unreliable.
+    # Sanity cap: sparse stops may have no close match -- show On Time.
     if abs(delta_sec) > 45 * 60:
-        # Return the nearest slot for display but flag delta as 0 (On Time)
-        past_str    = fmt_time(times[best_idx - 1][0]) if best_idx > 0 else None
-        current_str = fmt_time(scheduled_raw)
-        next_str    = fmt_time(times[best_idx + 1][0]) if best_idx < len(times) - 1 else None
-        return scheduled_raw, {"past": past_str, "current": current_str, "next": next_str}, 0
+        delta_sec = 0
 
-    past_str    = fmt_time(times[best_idx - 1][0]) if best_idx > 0 else None
+    past_str    = fmt_time(times[current_idx - 1][0]) if current_idx > 0 else None
     current_str = fmt_time(scheduled_raw)
-    next_str    = fmt_time(times[best_idx + 1][0]) if best_idx < len(times) - 1 else None
+    next_str    = fmt_time(times[current_idx + 1][0]) if current_idx < len(times) - 1 else None
 
     return scheduled_raw, {"past": past_str, "current": current_str, "next": next_str}, delta_sec
 

@@ -34,11 +34,11 @@ const BusSheet = ({ stop, onClose }) => {
     isDragging.current = false;
   }, [dragY, onClose]);
 
-  const toggleExpanded = useCallback((tripId) => {
+  const toggleExpanded = useCallback((routeId) => {
     setExpandedBuses((prev) => {
       const next = new Set(prev);
-      if (next.has(tripId)) next.delete(tripId);
-      else next.add(tripId);
+      if (next.has(routeId)) next.delete(routeId);
+      else next.add(routeId);
       return next;
     });
   }, []);
@@ -111,6 +111,9 @@ const BusSheet = ({ stop, onClose }) => {
               ? `${deltaMin} min early`
               : `LATE ${deltaMin} min`}
           </span>
+        )}
+        {expanded && bus.also_in_min != null && (
+          <span className="eta-also-in">Also in {bus.also_in_min} min</span>
         )}
       </div>
     );
@@ -191,12 +194,13 @@ const BusSheet = ({ stop, onClose }) => {
           </div>
         ) : busData && busData.length > 0 ? (
           busData.map((bus, index) => {
-            const expanded = expandedBuses.has(bus.trip_id || index);
+            const expandKey = bus.route_id || bus.trip_id || index;
+            const expanded = expandedBuses.has(expandKey);
             return (
               <div
-                key={bus.trip_id || index}
+                key={expandKey}
                 className={`bus-item${expanded ? " bus-item--expanded" : ""}`}
-                onClick={() => toggleExpanded(bus.trip_id || index)}
+                onClick={() => toggleExpanded(expandKey)}
               >
                 <div
                   className="bus-item-left"

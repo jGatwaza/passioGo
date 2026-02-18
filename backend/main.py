@@ -124,8 +124,10 @@ def get_stop_status(stop_id: str):
         # active timetable — works even when the realtime trip_id belongs to an
         # expired service period that the provider hasn't rotated out yet.
         sched_today = get_schedule_today()
+        route_info = trip_route_map.get(trip_id, {})
+        route_id = route_info.get("route_id", "")
         scheduled_time_str, schedule_context, delta = get_stop_schedule_context(
-            stop_id, eta_dt, sched_today, static_schedule
+            stop_id, route_id, eta_dt, sched_today, static_schedule
         )
 
         # debug logging
@@ -138,8 +140,6 @@ def get_stop_status(stop_id: str):
             status = "Scheduled"
             color = "Green"
 
-        # get route info
-        route_info = trip_route_map.get(trip_id, {})
         route_name = route_info.get("long_name") or route_info.get("short_name") or "Unknown Route"
         route_badge = route_info.get("short_name") or "Bus"
         route_color = route_info.get("color") or "#e310d2"
@@ -161,6 +161,7 @@ def get_stop_status(stop_id: str):
 
         buses.append({
             "trip_id": trip_id,
+            "route_id": route_id,
             "route_badge": route_badge,
             "route_name": route_name,
             "bus_number": vehicle_label,
@@ -173,12 +174,22 @@ def get_stop_status(stop_id: str):
             "delta_sec": delta
         })
     
-    # sort by ETA
+    # sort by ETA, then deduplicate: one entry per route (soonest bus)
     buses.sort(key=lambda x: x['eta_min'])
-    
+
+    seen_routes = {}
+    for b in buses:
+        rid = b['route_id'] or b['route_badge']
+        if rid not in seen_routes:
+            seen_routes[rid] = b
+        elif 'also_in_min' not in seen_routes[rid]:
+            seen_routes[rid]['also_in_min'] = b['eta_min']
+
+    deduped = sorted(seen_routes.values(), key=lambda x: x['eta_min'])
+
     return {
         "stop_id": stop_id,
-        "buses": buses
+        "buses": deduped
     }
 
 if __name__ == "__main__":
