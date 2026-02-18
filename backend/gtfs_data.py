@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 STATIC_GTFS_DIR = "../static gtfs"
 
@@ -42,50 +42,87 @@ def load_static_data():
     print(f"Loaded {len(schedule_df)} stop times and {len(trip_route_map)} trips.")
     return schedule_df, trip_route_map
 
-def get_best_scheduled_time(trip_id, stop_id, eta_dt, schedule_df):
+def get_best_scheduled_time(trip_id, stop_id, schedule_df, stop_sequence=None):
     """
-    Finds the scheduled arrival time closest to the estimated arrival time (eta_dt).
-    This ignores stop_sequence if provided, as it can be unreliable.
+    Returns the scheduled arrival_time string (HH:MM:SS) for a specific bus visit
+    to a stop, using the following strategy:
+
+    1. PRIMARY — If `stop_sequence` is provided (from the realtime feed), look up
+       the exact static row that matches (trip_id, stop_id, stop_sequence).  This
+       uniquely identifies the visit even when a circular route visits the same
+       stop more than once, and is completely stable across polls.
+
+    2. FALLBACK — If no stop_sequence match is found (e.g. added trip, sequence
+       numbering mismatch), find all static rows for (trip_id, stop_id) and return
+       the scheduled time of the *earliest visit whose scheduled time is still in
+       the future* relative to wall-clock now.  This prevents flipping to a past
+       schedule on each refresh.
+
+    3. END-OF-SERVICE — If all candidate times are in the past, return the latest
+       one so the caller always has something to compare against.
     """
     mask = (schedule_df['trip_id'] == str(trip_id)) & (schedule_df['stop_id'] == str(stop_id))
     matches = schedule_df[mask].copy()
-    
+
     if matches.empty:
         return None
-        
-    # convert arrival_time strings to datetime objects for comparison
-    # ETA is a datetime. matching arrival_time ("HH:MM:SS") needs care (overnight etc).
-    
+
+    now = datetime.now()
+
     def parse_to_dt(time_str):
         try:
             h, m, s = map(int, time_str.split(':'))
-            # handle > 24 hours (e.g. 25:30)
             day_offset = 0
             if h >= 24:
                 h -= 24
                 day_offset = 1
-                
-            # use eta_dt's date as baseline
-            base_date = eta_dt.date()
-            return datetime(base_date.year, base_date.month, base_date.day, h, m, s)
+            base = now.date()
+            return datetime(base.year, base.month, base.day, h, m, s) + \
+                   timedelta(days=day_offset)
         except:
             return None
 
-    best_match_time = None
-    min_diff = float('inf')
-    
+    # --- Strategy 1: exact stop_sequence match ---
+    if stop_sequence is not None and 'stop_sequence' in matches.columns:
+        seq_match = matches[matches['stop_sequence'] == int(stop_sequence)]
+        if not seq_match.empty:
+            time_str = seq_match.iloc[0]['arrival_time']
+            sched_dt = parse_to_dt(time_str)
+            if sched_dt is None:
+                return time_str  # can't parse but still return it
+
+            # If this scheduled time is still upcoming (or just barely past with
+            # 2-min grace), return it — the bus hasn't left this stop yet per
+            # the schedule, so this is the correct reference.
+            grace = timedelta(minutes=2)
+            if sched_dt >= now - grace:
+                return time_str
+
+            # The scheduled time for THIS exact visit is already well in the past.
+            # That means per the static schedule this bus has already served the
+            # stop at this sequence number.  Fall through to look for the next
+            # future visit (another sequence number at the same stop, if any).
+
+    # --- Strategy 2: next future visit (fallback / post-departure) ---
+    candidates = []
     for _, row in matches.iterrows():
-        sched_time_str = row['arrival_time']
-        sched_dt = parse_to_dt(sched_time_str)
-        
+        sched_dt = parse_to_dt(row['arrival_time'])
         if sched_dt:
-            # calculate absolute difference in seconds
-            diff = abs((eta_dt - sched_dt).total_seconds())
-            if diff < min_diff:
-                min_diff = diff
-                best_match_time = sched_time_str
-                
-    return best_match_time
+            candidates.append((sched_dt, row['arrival_time']))
+
+    if not candidates:
+        return None
+
+    grace = timedelta(minutes=2)
+    future = [(dt, ts) for dt, ts in candidates if dt >= now - grace]
+
+    if future:
+        future.sort(key=lambda x: x[0])
+        return future[0][1]
+
+    # --- Strategy 3: end-of-service, return the latest past time ---
+    candidates.sort(key=lambda x: x[0])
+    return candidates[-1][1]
 
 if __name__ == "__main__":
     # Test loading

@@ -71,14 +71,15 @@ def get_stop_status(stop_id: str):
             continue
             
         predicted_unix = arrival['time']
-        stop_sequence = target_update.get('stop_sequence') # Extract sequence
+        stop_sequence = target_update.get('stop_sequence')  # exact visit identifier from realtime
         eta_dt = datetime.fromtimestamp(predicted_unix)
         
-        # get scheduled time (time-based matching)
-        scheduled_time_str = get_best_scheduled_time(trip_id, stop_id, eta_dt, static_schedule)
+        # get scheduled time: use stop_sequence to pin the exact static row so
+        # the reference never flips between refreshes.
+        scheduled_time_str = get_best_scheduled_time(trip_id, stop_id, static_schedule, stop_sequence)
         
         # debug logging
-        print(f"[DEBUG] Trip: {trip_id}, ETA: {eta_dt} -> Scheduled: {scheduled_time_str}", flush=True)
+        print(f"[DEBUG] Trip: {trip_id}, Stop: {stop_id}, Seq: {stop_sequence}, ETA: {eta_dt} -> Scheduled: {scheduled_time_str}", flush=True)
         
         status = "Scheduled"
         color = "Gray" # Default ETA color
@@ -93,7 +94,7 @@ def get_stop_status(stop_id: str):
         else:
             # trip exists in realtime but not in static at this time
             status = "Added" 
-            color = "#3498db" # Default Blue for added/live trips without schedule
+            color = "#3498db" # default Blue for added/live trips without schedule
 
         # get route info
         route_info = trip_route_map.get(trip_id, {})

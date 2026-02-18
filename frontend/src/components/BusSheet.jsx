@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import './BusSheet.css';
-import tripIcon from '../assets/trip.png';
 
 const BusSheet = ({ stop, onClose }) => {
     const [busData, setBusData] = useState(null);
