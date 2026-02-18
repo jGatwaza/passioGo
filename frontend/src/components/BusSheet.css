@@ -65,7 +65,69 @@
   text-align: center;
   padding: 0 16px 14px;
   border-bottom: 1px solid #f0f0f0;
-  margin-bottom: 4px;
+  margin-bottom: 0;
+}
+
+.bus-sheet-col-headers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px 7px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+
+.col-headers-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.col-header-trip {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #999;
+}
+
+.col-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.col-header-eta {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #999;
+  padding-right: 12px;
+}
+
+.bus-sheet-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #666;
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .sheet-header,
@@ -82,7 +144,7 @@
 }
 
 .bus-item-left {
-  flex: 4;
+  flex: 3;
   background-color: #e310d2;
   padding: 25px;
   display: flex;
@@ -91,7 +153,7 @@
 }
 
 .bus-item-right {
-  flex: 1;
+  flex: 1.6;
   background-color: white;
   display: flex;
   align-items: center;
@@ -147,6 +209,16 @@
   font-size: 0.9rem;
 }
 
+.bus-schedule {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.82rem;
+}
+
+.bus-scheduled-inline {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
+}
+
 .bus-eta {
   font-size: 1.5rem;
   font-weight: 700;
@@ -156,10 +228,102 @@
   flex-direction: column;
   align-items: center;
   line-height: 1;
+  gap: 3px;
+}
+
+.eta-number {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.eta-arrived {
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.eta-arriving {
+  font-size: 2rem;
 }
 
 .min-label {
-  font-size: 0.8rem;
-  font-weight: 400;
+  font-size: 0.75rem;
+  font-weight: 500;
   color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.eta-status-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+/* ── Expand / collapse ────────────────────────────────── */
+.bus-item {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.bus-item--expanded .bus-item-left {
+  align-items: flex-start;
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.bus-item--expanded .bus-item-right {
+  align-items: flex-start;
+  padding-top: 20px;
+}
+
+/* ── Schedule context (past / current / next) ─────────── */
+.schedule-context {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  padding-top: 8px;
+  width: 100%;
+}
+
+.sched-slot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sched-slot-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.55);
+  min-width: 58px;
+}
+
+.sched-slot-time {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.sched-slot.current .sched-slot-label {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.sched-slot.current .sched-slot-time {
+  color: white;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.sched-slot.empty .sched-slot-time {
+  opacity: 0.3;
 }

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from gtfs_data import load_static_data, load_shapes, get_best_scheduled_time
+from gtfs_data import load_static_data, load_shapes, get_best_scheduled_time, get_schedule_context
 from realtime import fetch_realtime_updates, parse_time, determine_status_color
 from datetime import datetime, timedelta
 import threading
@@ -98,6 +98,7 @@ def get_stop_status(stop_id: str):
         # get scheduled time: use stop_sequence to pin the exact static row so
         # the reference never flips between refreshes.
         scheduled_time_str = get_best_scheduled_time(trip_id, stop_id, static_schedule, stop_sequence)
+        schedule_context = get_schedule_context(trip_id, stop_id, static_schedule, stop_sequence)
         
         # debug logging
         print(f"[DEBUG] Trip: {trip_id}, Stop: {stop_id}, Seq: {stop_sequence}, ETA: {eta_dt} -> Scheduled: {scheduled_time_str}", flush=True)
@@ -153,11 +154,12 @@ def get_stop_status(stop_id: str):
             "route_badge": route_badge,
             "route_name": route_name,
             "bus_number": vehicle_label,
-            "scheduled_time": formatted_schedule, 
+            "scheduled_time": formatted_schedule,
+            "schedule_context": schedule_context,
             "eta_min": minutes_away if minutes_away >= 0 else 0,
             "status": status,
-            "color": color, # this calculates ETA text color (Green/Red/etc)
-            "route_color": route_color, # this is the branding color for the line
+            "color": color,
+            "route_color": route_color,
             "delta_sec": delta
         })
     

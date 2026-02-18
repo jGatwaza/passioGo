@@ -1,14 +1,50 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import "./BusSheet.css";
 
 const BusSheet = ({ stop, onClose }) => {
   const [busData, setBusData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dragY, setDragY] = useState(0);
+  const [expandedBuses, setExpandedBuses] = useState(new Set());
+
+  const containerRef = useRef(null);
+  const touchStartY = useRef(null);
+  const isDragging = useRef(false);
+
+  // Swipe-down to close
+  const handleTouchStart = useCallback((e) => {
+    if (containerRef.current && containerRef.current.scrollTop > 0) return;
+    touchStartY.current = e.touches[0].clientY;
+    isDragging.current = true;
+  }, []);
+
+  const handleTouchMove = useCallback((e) => {
+    if (!isDragging.current || touchStartY.current === null) return;
+    const delta = e.touches[0].clientY - touchStartY.current;
+    if (delta > 0) {
+      setDragY(delta);
+      e.preventDefault();
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (dragY > 80) onClose();
+    setDragY(0);
+    touchStartY.current = null;
+    isDragging.current = false;
+  }, [dragY, onClose]);
+
+  const toggleExpanded = useCallback((tripId) => {
+    setExpandedBuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(tripId)) next.delete(tripId);
+      else next.add(tripId);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!stop || !stop.stop_id) return;
-
-    // reset state when the selected stop changes
     let cancelled = false;
 
     const fetchData = () => {
@@ -26,12 +62,8 @@ const BusSheet = ({ stop, onClose }) => {
         });
     };
 
-    // initial fetch
     fetchData();
-
-    // poll every 10 seconds
     const intervalId = setInterval(fetchData, 10000);
-
     return () => {
       cancelled = true;
       clearInterval(intervalId);
@@ -40,7 +72,6 @@ const BusSheet = ({ stop, onClose }) => {
 
   if (!stop) return null;
 
-  // helper for color mapping
   const getStatusColor = (statusColor) => {
     switch (statusColor) {
       case "Green":
@@ -56,11 +87,100 @@ const BusSheet = ({ stop, onClose }) => {
     }
   };
 
+  const renderEta = (bus, expanded) => {
+    const color = getStatusColor(bus.color);
+    const absDelta = Math.abs(bus.delta_sec);
+    const deltaMin = Math.round(absDelta / 60);
+    const showTag = expanded && absDelta > 60;
+
+    return (
+      <div className="bus-eta" style={{ color }}>
+        {bus.eta_min <= 0 ? (
+          <span className="eta-number eta-arrived">Arrived</span>
+        ) : (
+          <>
+            <span className="eta-number">{bus.eta_min}</span>
+            <span className="min-label">
+              {bus.eta_min === 1 ? "Minute" : "Minutes"}
+            </span>
+          </>
+        )}
+        {showTag && (
+          <span className="eta-status-tag" style={{ color }}>
+            {bus.delta_sec < 0
+              ? `${deltaMin} min early`
+              : `LATE ${deltaMin} min`}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderScheduleContext = (bus) => {
+    const ctx = bus.schedule_context;
+    if (!ctx) return null;
+    return (
+      <div className="schedule-context">
+        <div className={`sched-slot past${!ctx.past ? " empty" : ""}`}>
+          <span className="sched-slot-label">Previous</span>
+          <span className="sched-slot-time">{ctx.past || "—"}</span>
+        </div>
+        <div className="sched-slot current">
+          <span className="sched-slot-label">Scheduled</span>
+          <span className="sched-slot-time current-time">
+            {ctx.current || "—"}
+          </span>
+        </div>
+        <div className={`sched-slot next${!ctx.next ? " empty" : ""}`}>
+          <span className="sched-slot-label">Next</span>
+          <span className="sched-slot-time">{ctx.next || "—"}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="bus-sheet-overlay" onClick={onClose}>
-      <div className="bus-sheet-container" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={containerRef}
+        className="bus-sheet-container"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
+          transition: dragY > 0 ? "none" : "transform 0.3s ease",
+        }}
+      >
         <div className="sheet-handle"></div>
         <div className="stop-name-header">{stop.name}</div>
+
+        {/* Column headers + legend */}
+        <div className="bus-sheet-col-headers">
+          <div className="col-headers-top">
+            <span className="col-header-trip">Trip</span>
+            <span className="col-header-eta">ETA</span>
+          </div>
+          <div className="bus-sheet-legend">
+            <span className="legend-item">
+              <span className="legend-dot" style={{ background: "#2ecc71" }} />
+              On Time
+            </span>
+            <span className="legend-item">
+              <span className="legend-dot" style={{ background: "#3498db" }} />
+              Early
+            </span>
+            <span className="legend-item">
+              <span className="legend-dot" style={{ background: "#e67e22" }} />
+              Late
+            </span>
+            <span className="legend-item">
+              <span className="legend-dot" style={{ background: "#e74c3c" }} />
+              Very Late
+            </span>
+          </div>
+        </div>
 
         {loading ? (
           <div
@@ -70,48 +190,51 @@ const BusSheet = ({ stop, onClose }) => {
             Loading...
           </div>
         ) : busData && busData.length > 0 ? (
-          busData.map((bus, index) => (
-            <div key={bus.trip_id || index} className="bus-item">
+          busData.map((bus, index) => {
+            const expanded = expandedBuses.has(bus.trip_id || index);
+            return (
               <div
-                className="bus-item-left"
-                style={{ backgroundColor: bus.route_color || "#e310d2" }}
-              >
-                <div className="bus-info">
-                  <div className="bus-header-row">
-                    <span
-                      className="route-badge"
-                      style={{ color: bus.route_color || "#e310d2" }}
-                    >
-                      {bus.route_badge}
-                    </span>
-                    <span className="bus-name">{bus.route_name}</span>
-                  </div>
-                  <div className="bus-route">
-                    Bus {bus.bus_number}
-                    {bus.scheduled_time && (
-                      <span className="bus-schedule">
-                        {" "}
-                        • Scheduled: {bus.scheduled_time}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div
-                className="bus-item-right"
-                style={{
-                  borderRight: `5px solid ${bus.route_color || "#e310d2"}`,
-                }}
+                key={bus.trip_id || index}
+                className={`bus-item${expanded ? " bus-item--expanded" : ""}`}
+                onClick={() => toggleExpanded(bus.trip_id || index)}
               >
                 <div
-                  className="bus-eta"
-                  style={{ color: getStatusColor(bus.color) }}
+                  className="bus-item-left"
+                  style={{ backgroundColor: bus.route_color || "#e310d2" }}
                 >
-                  {bus.eta_min} <span className="min-label">min</span>
+                  <div className="bus-info">
+                    <div className="bus-header-row">
+                      <span
+                        className="route-badge"
+                        style={{ color: bus.route_color || "#e310d2" }}
+                      >
+                        {bus.route_badge}
+                      </span>
+                      <span className="bus-name">{bus.route_name}</span>
+                    </div>
+                    <div className="bus-route">
+                      Bus {bus.bus_number}
+                      {!expanded && bus.scheduled_time && (
+                        <span className="bus-scheduled-inline">
+                          {" "}
+                          • Scheduled: {bus.scheduled_time}
+                        </span>
+                      )}
+                    </div>
+                    {expanded && renderScheduleContext(bus)}
+                  </div>
+                </div>
+                <div
+                  className="bus-item-right"
+                  style={{
+                    borderRight: `5px solid ${bus.route_color || "#e310d2"}`,
+                  }}
+                >
+                  {renderEta(bus, expanded)}
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div
             className="bus-item"

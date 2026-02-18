@@ -197,6 +197,95 @@ def get_best_scheduled_time(trip_id, stop_id, schedule_df, stop_sequence=None):
     candidates.sort(key=lambda x: x[0])
     return candidates[-1][1]
 
+
+def fmt_time(time_str):
+    """Format a GTFS HH:MM:SS string to 12-hour display, e.g. '9:05 AM'."""
+    try:
+        h, m, s = map(int, time_str.split(':'))
+        if h >= 24:
+            h -= 24
+        dummy = datetime.now().replace(hour=h, minute=m, second=s, microsecond=0)
+        return dummy.strftime("%I:%M %p").lstrip("0")
+    except:
+        return time_str
+
+
+def get_schedule_context(trip_id, stop_id, schedule_df, stop_sequence=None):
+    """
+    Returns a dict with up to three scheduled times for (trip_id, stop_id):
+      {
+        "past":    "9:00 AM" or None,
+        "current": "9:15 AM" or None,   ← the reference time (same as get_best_scheduled_time)
+        "next":    "9:30 AM" or None,
+      }
+    Uses the same pinning strategy as get_best_scheduled_time so the 'current'
+    slot is always stable across polls.
+    """
+    mask = (schedule_df['trip_id'] == str(trip_id)) & (schedule_df['stop_id'] == str(stop_id))
+    matches = schedule_df[mask].copy()
+
+    if matches.empty:
+        return {"past": None, "current": None, "next": None}
+
+    now = datetime.now()
+
+    def parse_to_dt(time_str):
+        try:
+            h, m, s = map(int, time_str.split(':'))
+            day_offset = 0
+            if h >= 24:
+                h -= 24
+                day_offset = 1
+            base = now.date()
+            return datetime(base.year, base.month, base.day, h, m, s) + timedelta(days=day_offset)
+        except:
+            return None
+
+    # Build sorted list of (dt, raw_time_str)
+    candidates = sorted(
+        [(parse_to_dt(row['arrival_time']), row['arrival_time'])
+         for _, row in matches.iterrows()
+         if parse_to_dt(row['arrival_time']) is not None],
+        key=lambda x: x[0]
+    )
+
+    if not candidates:
+        return {"past": None, "current": None, "next": None}
+
+    # Determine the current index using the same logic as get_best_scheduled_time
+    current_idx = None
+    grace = timedelta(minutes=2)
+
+    # Try exact stop_sequence match first
+    if stop_sequence is not None and 'stop_sequence' in matches.columns:
+        seq_match = matches[matches['stop_sequence'] == int(stop_sequence)]
+        if not seq_match.empty:
+            seq_time_str = seq_match.iloc[0]['arrival_time']
+            seq_dt = parse_to_dt(seq_time_str)
+            if seq_dt and seq_dt >= now - grace:
+                for i, (dt, ts) in enumerate(candidates):
+                    if ts == seq_time_str:
+                        current_idx = i
+                        break
+
+    # Fallback: earliest future candidate
+    if current_idx is None:
+        for i, (dt, ts) in enumerate(candidates):
+            if dt >= now - grace:
+                current_idx = i
+                break
+
+    # End-of-service fallback: last candidate
+    if current_idx is None:
+        current_idx = len(candidates) - 1
+
+    past_str    = fmt_time(candidates[current_idx - 1][1]) if current_idx > 0 else None
+    current_str = fmt_time(candidates[current_idx][1])
+    next_str    = fmt_time(candidates[current_idx + 1][1]) if current_idx < len(candidates) - 1 else None
+
+    return {"past": past_str, "current": current_str, "next": next_str}
+
+
 if __name__ == "__main__":
     # Test loading
     df, route_map = load_static_data()
