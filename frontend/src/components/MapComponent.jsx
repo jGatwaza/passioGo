@@ -1,5 +1,5 @@
 import React from "react";
-import { MapContainer, TileLayer, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import StopMarker from "./StopMarker";
 
@@ -16,6 +16,7 @@ const MapClickHandler = ({ onMapClick }) => {
 
 const MapComponent = ({
   stops = [],
+  shapes = [],
   onStopClick,
   onMapClick,
   selectedStop,
@@ -31,6 +32,18 @@ const MapComponent = ({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      {shapes.map((shape) => (
+        <Polyline
+          key={shape.shape_id}
+          positions={shape.points}
+          pathOptions={{
+            color: shape.color,
+            weight: 3.5,
+            opacity: 0.85,
+          }}
+        />
+      ))}
 
       {stops.map((stop) => (
         <StopMarker

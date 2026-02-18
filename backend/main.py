@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from gtfs_data import load_static_data, get_best_scheduled_time
+from gtfs_data import load_static_data, load_shapes, get_best_scheduled_time
 from realtime import fetch_realtime_updates, parse_time, determine_status_color
 from datetime import datetime, timedelta
 import threading
@@ -21,11 +21,13 @@ app.add_middleware(
 static_schedule = None
 trip_route_map = None
 stops_list = None
+shapes_data = None
 
 @app.on_event("startup")
 def startup_event():
-    global static_schedule, trip_route_map, stops_list
+    global static_schedule, trip_route_map, stops_list, shapes_data
     static_schedule, trip_route_map, stops_list = load_static_data()
+    shapes_data = load_shapes()
 
 @app.get("/api/health")
 def health_check():
@@ -39,6 +41,15 @@ def get_all_stops():
     if stops_list is None:
         raise HTTPException(status_code=503, detail="Static data not loaded")
     return {"stops": stops_list}
+
+@app.get("/api/shapes")
+def get_shapes():
+    """
+    Returns all route shapes with colours for rendering polylines on the map.
+    """
+    if shapes_data is None:
+        raise HTTPException(status_code=503, detail="Static data not loaded")
+    return {"shapes": shapes_data}
 
 @app.get("/api/stop/{stop_id}")
 def get_stop_status(stop_id: str):

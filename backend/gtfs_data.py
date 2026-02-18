@@ -56,6 +56,65 @@ def load_static_data():
     print(f"Loaded {len(schedule_df)} stop times, {len(trip_route_map)} trips, and {len(stops_list)} stops.")
     return schedule_df, trip_route_map, stops_list
 
+
+def load_shapes():
+    """
+    Builds route polylines from shapes.txt, coloured by their route.
+
+    Returns a list of dicts:
+      { shape_id, route_name, color, points: [[lat, lon], ...] }
+
+    Strategy:
+      shapes.txt  → points grouped by shape_id
+      trips.txt   → unique shape_id → route_id mapping
+      routes.txt  → route_id → color / name
+    Multiple trips often share the same shape_id, so we deduplicate and
+    emit one polyline per unique shape_id.
+    """
+    shapes_path = os.path.join(STATIC_GTFS_DIR, "shapes.txt")
+    shapes_df = pd.read_csv(shapes_path, dtype={'shape_id': str})
+
+    routes_path = os.path.join(STATIC_GTFS_DIR, "routes.txt")
+    routes_df = pd.read_csv(routes_path, dtype={'route_id': str, 'route_color': str})
+
+    trips_path = os.path.join(STATIC_GTFS_DIR, "trips.txt")
+    trips_df = pd.read_csv(trips_path, dtype={'trip_id': str, 'route_id': str, 'shape_id': str})
+
+    # One representative route per shape_id (first encountered)
+    shape_route = (
+        trips_df[['shape_id', 'route_id']]
+        .dropna(subset=['shape_id'])
+        .drop_duplicates(subset=['shape_id'])
+        .merge(routes_df[['route_id', 'route_short_name', 'route_long_name', 'route_color']], on='route_id', how='left')
+    )
+
+    shape_color_map = {}
+    shape_name_map = {}
+    for _, row in shape_route.iterrows():
+        sid = str(row['shape_id'])
+        color = f"#{row['route_color']}" if pd.notna(row['route_color']) and str(row['route_color']).strip() else "#888888"
+        name = row['route_long_name'] if pd.notna(row['route_long_name']) and str(row['route_long_name']).strip() \
+               else (row['route_short_name'] if pd.notna(row['route_short_name']) else "")
+        shape_color_map[sid] = color
+        shape_name_map[sid] = str(name)
+
+    # Sort each shape's points by sequence, then build coordinate lists
+    shapes_df = shapes_df.sort_values(['shape_id', 'shape_pt_sequence'])
+    shapes_list = []
+    for shape_id, group in shapes_df.groupby('shape_id', sort=False):
+        sid = str(shape_id)
+        points = [[float(r['shape_pt_lat']), float(r['shape_pt_lon'])] for _, r in group.iterrows()]
+        shapes_list.append({
+            "shape_id": sid,
+            "route_name": shape_name_map.get(sid, ""),
+            "color": shape_color_map.get(sid, "#888888"),
+            "points": points,
+        })
+
+    print(f"Loaded {len(shapes_list)} route shapes.")
+    return shapes_list
+
+
 def get_best_scheduled_time(trip_id, stop_id, schedule_df, stop_sequence=None):
     """
     Returns the scheduled arrival_time string (HH:MM:SS) for a specific bus visit
