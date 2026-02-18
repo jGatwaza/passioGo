@@ -7,42 +7,55 @@ STATIC_GTFS_DIR = "../static gtfs"
 def load_static_data():
     """
     Loads static GTFS data and returns:
-    1. schedule_df: DataFrame with scheduled arrival times
-    2. trip_route_map: Dictionary mapping trip_id -> {route_short_name, route_long_name, route_color, route_text_color}
-    3. stops_list: List of dicts with stop_id, stop_name, stop_lat, stop_lon
+      schedule_df      – full stop_times DataFrame (all services)
+      trip_route_map   – trip_id -> route display info
+      stops_list       – list of stop dicts
+      calendar_df      – calendar.txt DataFrame
+      calendar_dates_df– calendar_dates.txt DataFrame
+      trip_service_map – {trip_id: service_id}
     """
     print("Loading Static GTFS data...")
-    
+
     stop_times_path = os.path.join(STATIC_GTFS_DIR, "stop_times.txt")
     stop_times_df = pd.read_csv(stop_times_path, dtype={'trip_id': str, 'stop_id': str})
-    
     cols = ['trip_id', 'stop_id', 'arrival_time']
     if 'stop_sequence' in stop_times_df.columns:
         cols.append('stop_sequence')
-        
     schedule_df = stop_times_df[cols].copy()
-    
+
     routes_path = os.path.join(STATIC_GTFS_DIR, "routes.txt")
     routes_df = pd.read_csv(routes_path, dtype={'route_id': str, 'route_color': str, 'route_text_color': str})
-    
+
     trips_path = os.path.join(STATIC_GTFS_DIR, "trips.txt")
-    trips_df = pd.read_csv(trips_path, dtype={'trip_id': str, 'route_id': str})
-    
+    trips_df = pd.read_csv(trips_path, dtype={'trip_id': str, 'route_id': str, 'service_id': str})
+
     trips_with_routes = pd.merge(trips_df, routes_df, on='route_id', how='left')
-    
+
     trip_route_map = {}
+    trip_service_map = {}
     for _, row in trips_with_routes.iterrows():
-        trip_route_map[str(row['trip_id'])] = {
+        tid = str(row['trip_id'])
+        trip_route_map[tid] = {
             "route_id": str(row['route_id']),
             "short_name": row['route_short_name'] if pd.notna(row['route_short_name']) else "",
             "long_name": row['route_long_name'] if pd.notna(row['route_long_name']) else "",
             "color": f"#{row['route_color']}" if pd.notna(row['route_color']) else "#000000",
             "text_color": f"#{row['route_text_color']}" if pd.notna(row['route_text_color']) else "#FFFFFF"
         }
+        trip_service_map[tid] = str(row['service_id']) if pd.notna(row['service_id']) else ""
 
-    # Load stops
-    stops_path = os.path.join(STATIC_GTFS_DIR, "stops.txt")
-    stops_df = pd.read_csv(stops_path, dtype={'stop_id': str})
+    # calendar
+    calendar_df = pd.read_csv(
+        os.path.join(STATIC_GTFS_DIR, "calendar.txt"),
+        dtype={c: str for c in ['service_id', 'start_date', 'end_date']}
+    )
+    calendar_dates_df = pd.read_csv(
+        os.path.join(STATIC_GTFS_DIR, "calendar_dates.txt"),
+        dtype={'service_id': str, 'date': str}
+    )
+
+    # stops
+    stops_df = pd.read_csv(os.path.join(STATIC_GTFS_DIR, "stops.txt"), dtype={'stop_id': str})
     stops_list = []
     for _, row in stops_df.iterrows():
         if pd.notna(row['stop_lat']) and pd.notna(row['stop_lon']):
@@ -52,9 +65,9 @@ def load_static_data():
                 "lat": float(row['stop_lat']),
                 "lon": float(row['stop_lon']),
             })
-        
-    print(f"Loaded {len(schedule_df)} stop times, {len(trip_route_map)} trips, and {len(stops_list)} stops.")
-    return schedule_df, trip_route_map, stops_list
+
+    print(f"Loaded {len(schedule_df)} stop times, {len(trip_route_map)} trips, {len(stops_list)} stops.")
+    return schedule_df, trip_route_map, stops_list, calendar_df, calendar_dates_df, trip_service_map
 
 
 def load_shapes():
@@ -115,179 +128,170 @@ def load_shapes():
     return shapes_list
 
 
-def get_best_scheduled_time(trip_id, stop_id, schedule_df, stop_sequence=None):
+# ─────────────────────────────────────────────────────────────────────────────
+# Service-date helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_active_service_ids(calendar_df, calendar_dates_df, date=None):
     """
-    Returns the scheduled arrival_time string (HH:MM:SS) for a specific bus visit
-    to a stop, using the following strategy:
+    Returns the set of service_ids that are active on `date` (defaults to today).
 
-    1. PRIMARY — If `stop_sequence` is provided (from the realtime feed), look up
-       the exact static row that matches (trip_id, stop_id, stop_sequence).  This
-       uniquely identifies the visit even when a circular route visits the same
-       stop more than once, and is completely stable across polls.
-
-    2. FALLBACK — If no stop_sequence match is found (e.g. added trip, sequence
-       numbering mismatch), find all static rows for (trip_id, stop_id) and return
-       the scheduled time of the *earliest visit whose scheduled time is still in
-       the future* relative to wall-clock now.  This prevents flipping to a past
-       schedule on each refresh.
-
-    3. END-OF-SERVICE — If all candidate times are in the past, return the latest
-       one so the caller always has something to compare against.
+    Rules (standard GTFS):
+      1. A service runs if calendar.txt has its DOW bit set AND today falls within
+         [start_date, end_date].
+      2. calendar_dates.txt exception_type=1 adds a service for that date.
+      3. calendar_dates.txt exception_type=2 removes a service for that date.
     """
-    mask = (schedule_df['trip_id'] == str(trip_id)) & (schedule_df['stop_id'] == str(stop_id))
-    matches = schedule_df[mask].copy()
+    if date is None:
+        date = datetime.now().date()
 
-    if matches.empty:
-        return None
+    today_str = date.strftime("%Y%m%d")
+    today_int = int(today_str)
+    dow = date.strftime("%A").lower()      # 'monday' … 'sunday'
 
-    now = datetime.now()
+    active = set()
 
-    def parse_to_dt(time_str):
+    # Step 1: calendar.txt
+    for _, row in calendar_df.iterrows():
         try:
-            h, m, s = map(int, time_str.split(':'))
-            day_offset = 0
-            if h >= 24:
-                h -= 24
-                day_offset = 1
-            base = now.date()
-            return datetime(base.year, base.month, base.day, h, m, s) + \
-                   timedelta(days=day_offset)
-        except:
-            return None
+            if int(row[dow]) == 1 and int(row['start_date']) <= today_int <= int(row['end_date']):
+                active.add(str(row['service_id']))
+        except (ValueError, KeyError):
+            pass
 
-    # --- Strategy 1: exact stop_sequence match ---
-    if stop_sequence is not None and 'stop_sequence' in matches.columns:
-        seq_match = matches[matches['stop_sequence'] == int(stop_sequence)]
-        if not seq_match.empty:
-            time_str = seq_match.iloc[0]['arrival_time']
-            sched_dt = parse_to_dt(time_str)
-            if sched_dt is None:
-                return time_str  # can't parse but still return it
+    # Step 2: calendar_dates.txt overrides
+    today_rows = calendar_dates_df[calendar_dates_df['date'] == today_str]
+    for _, row in today_rows.iterrows():
+        sid = str(row['service_id'])
+        exc = int(row['exception_type'])
+        if exc == 1:
+            active.add(sid)
+        elif exc == 2:
+            active.discard(sid)
 
-            # If this scheduled time is still upcoming (or just barely past with
-            # 2-min grace), return it — the bus hasn't left this stop yet per
-            # the schedule, so this is the correct reference.
-            grace = timedelta(minutes=2)
-            if sched_dt >= now - grace:
-                return time_str
+    return active
 
-            # The scheduled time for THIS exact visit is already well in the past.
-            # That means per the static schedule this bus has already served the
-            # stop at this sequence number.  Fall through to look for the next
-            # future visit (another sequence number at the same stop, if any).
 
-    # --- Strategy 2: next future visit (fallback / post-departure) ---
-    candidates = []
-    for _, row in matches.iterrows():
-        sched_dt = parse_to_dt(row['arrival_time'])
-        if sched_dt:
-            candidates.append((sched_dt, row['arrival_time']))
+def filter_schedule_for_date(schedule_df, trip_service_map, active_service_ids):
+    """
+    Returns a copy of schedule_df containing only rows whose trip_id belongs to
+    a service that is active today.  This eliminates expired or future service
+    periods and prevents the algorithm from latching onto stale scheduled times.
+    """
+    active_trips = {tid for tid, sid in trip_service_map.items() if sid in active_service_ids}
+    return schedule_df[schedule_df['trip_id'].isin(active_trips)].copy()
 
-    if not candidates:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Schedule lookup helpers (operate on schedule_today — already date-filtered)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_gtfs_time(time_str, base_date):
+    """
+    Converts a GTFS arrival_time string (HH:MM:SS, HH may be >= 24 for
+    post-midnight service) to a datetime on `base_date`.
+    Returns None if parsing fails.
+    """
+    try:
+        h, m, s = map(int, time_str.split(':'))
+        extra_days = h // 24
+        h = h % 24
+        return datetime(base_date.year, base_date.month, base_date.day, h, m, s) + timedelta(days=extra_days)
+    except Exception:
         return None
-
-    grace = timedelta(minutes=2)
-    future = [(dt, ts) for dt, ts in candidates if dt >= now - grace]
-
-    if future:
-        future.sort(key=lambda x: x[0])
-        return future[0][1]
-
-    # --- Strategy 3: end-of-service, return the latest past time ---
-    candidates.sort(key=lambda x: x[0])
-    return candidates[-1][1]
 
 
 def fmt_time(time_str):
     """Format a GTFS HH:MM:SS string to 12-hour display, e.g. '9:05 AM'."""
     try:
         h, m, s = map(int, time_str.split(':'))
-        if h >= 24:
-            h -= 24
+        h = h % 24
         dummy = datetime.now().replace(hour=h, minute=m, second=s, microsecond=0)
         return dummy.strftime("%I:%M %p").lstrip("0")
-    except:
+    except Exception:
         return time_str
 
 
-def get_schedule_context(trip_id, stop_id, schedule_df, stop_sequence=None):
+def get_stop_schedule_context(stop_id, eta_dt, schedule_today, full_schedule=None):
     """
-    Returns a dict with up to three scheduled times for (trip_id, stop_id):
-      {
-        "past":    "9:00 AM" or None,
-        "current": "9:15 AM" or None,   ← the reference time (same as get_best_scheduled_time)
-        "next":    "9:30 AM" or None,
-      }
-    Uses the same pinning strategy as get_best_scheduled_time so the 'current'
-    slot is always stable across polls.
+    The canonical schedule lookup.  Schedules belong to stops, not individual
+    buses — the timetable for a stop is the source of truth.
+
+    Given a stop and a bus's predicted arrival datetime (`eta_dt`):
+
+    1. Collect every unique scheduled arrival time at `stop_id`.  Uses
+       `full_schedule` (all service periods) if provided and `schedule_today`
+       has fewer than 2 slots for the stop, so that stops served by recently
+       expired but still-operating service periods are matched correctly.
+
+    2. Find the scheduled slot whose time is closest to `eta_dt`.  This
+       matches the bus to its intended slot regardless of whether the realtime
+       trip_id is in this period’s static feed.
+
+    3. Apply a sanity cap: if the closest slot is > 45 minutes away the match
+       is unreliable (the stop has no plausible scheduled arrival near this bus).
+       In that case return delta=0 / color=Green so the bus shows as On Time
+       rather than wildly early or late.
+
+    Returns: (scheduled_raw_str, context_dict, delta_sec)
+      scheduled_raw  – HH:MM:SS for formatting/logging  (None if no match)
+      context        – {"past": fmt, "current": fmt, "next": fmt}
+      delta_sec      – (eta_dt − scheduled_dt).total_seconds(); 0 if no match
     """
-    mask = (schedule_df['trip_id'] == str(trip_id)) & (schedule_df['stop_id'] == str(stop_id))
-    matches = schedule_df[mask].copy()
+    base = eta_dt.date()
 
-    if matches.empty:
-        return {"past": None, "current": None, "next": None}
+    def _build_times(df):
+        rows = df[df['stop_id'] == str(stop_id)]
+        seen = {}
+        for ts in rows['arrival_time']:
+            if ts not in seen:
+                dt = _parse_gtfs_time(ts, base)
+                if dt is not None:
+                    seen[ts] = dt
+        return sorted(seen.items(), key=lambda x: x[1])  # [(raw_str, dt), ...]
 
-    now = datetime.now()
+    times = _build_times(schedule_today)
 
-    def parse_to_dt(time_str):
-        try:
-            h, m, s = map(int, time_str.split(':'))
-            day_offset = 0
-            if h >= 24:
-                h -= 24
-                day_offset = 1
-            base = now.date()
-            return datetime(base.year, base.month, base.day, h, m, s) + timedelta(days=day_offset)
-        except:
-            return None
+    # Fall back to full schedule if today's slice has < 2 slots (stop
+    # is served by a recently-expired service that's still in the realtime feed)
+    if len(times) < 2 and full_schedule is not None:
+        times = _build_times(full_schedule)
 
-    # Build sorted list of (dt, raw_time_str)
-    candidates = sorted(
-        [(parse_to_dt(row['arrival_time']), row['arrival_time'])
-         for _, row in matches.iterrows()
-         if parse_to_dt(row['arrival_time']) is not None],
-        key=lambda x: x[0]
+    if not times:
+        return None, {"past": None, "current": None, "next": None}, 0
+
+    # Match: closest scheduled slot to the bus’s ETA
+    best_idx = min(
+        range(len(times)),
+        key=lambda i: abs((times[i][1] - eta_dt).total_seconds())
     )
 
-    if not candidates:
-        return {"past": None, "current": None, "next": None}
+    scheduled_raw, scheduled_dt = times[best_idx]
+    delta_sec = (eta_dt - scheduled_dt).total_seconds()
 
-    # Determine the current index using the same logic as get_best_scheduled_time
-    current_idx = None
-    grace = timedelta(minutes=2)
+    # Sanity cap: if no slot is within 45 minutes the match is unreliable.
+    if abs(delta_sec) > 45 * 60:
+        # Return the nearest slot for display but flag delta as 0 (On Time)
+        past_str    = fmt_time(times[best_idx - 1][0]) if best_idx > 0 else None
+        current_str = fmt_time(scheduled_raw)
+        next_str    = fmt_time(times[best_idx + 1][0]) if best_idx < len(times) - 1 else None
+        return scheduled_raw, {"past": past_str, "current": current_str, "next": next_str}, 0
 
-    # Try exact stop_sequence match first
-    if stop_sequence is not None and 'stop_sequence' in matches.columns:
-        seq_match = matches[matches['stop_sequence'] == int(stop_sequence)]
-        if not seq_match.empty:
-            seq_time_str = seq_match.iloc[0]['arrival_time']
-            seq_dt = parse_to_dt(seq_time_str)
-            if seq_dt and seq_dt >= now - grace:
-                for i, (dt, ts) in enumerate(candidates):
-                    if ts == seq_time_str:
-                        current_idx = i
-                        break
+    past_str    = fmt_time(times[best_idx - 1][0]) if best_idx > 0 else None
+    current_str = fmt_time(scheduled_raw)
+    next_str    = fmt_time(times[best_idx + 1][0]) if best_idx < len(times) - 1 else None
 
-    # Fallback: earliest future candidate
-    if current_idx is None:
-        for i, (dt, ts) in enumerate(candidates):
-            if dt >= now - grace:
-                current_idx = i
-                break
-
-    # End-of-service fallback: last candidate
-    if current_idx is None:
-        current_idx = len(candidates) - 1
-
-    past_str    = fmt_time(candidates[current_idx - 1][1]) if current_idx > 0 else None
-    current_str = fmt_time(candidates[current_idx][1])
-    next_str    = fmt_time(candidates[current_idx + 1][1]) if current_idx < len(candidates) - 1 else None
-
-    return {"past": past_str, "current": current_str, "next": next_str}
+    return scheduled_raw, {"past": past_str, "current": current_str, "next": next_str}, delta_sec
 
 
 if __name__ == "__main__":
-    # Test loading
-    df, route_map = load_static_data()
-    print(df.head())
-    print(f"Sample Route Map: {list(route_map.items())[:2]}")
+    from datetime import datetime as _dt
+    df, route_map, stops, cal, cal_dates, tsvc = load_static_data()
+    active = get_active_service_ids(cal, cal_dates)
+    today_df = filter_schedule_for_date(df, tsvc, active)
+    print(f"Active service_ids: {active}")
+    print(f"Rows in today's schedule: {len(today_df)}")
+    eta_test = _dt.now().replace(second=0, microsecond=0)
+    raw, ctx, delta = get_stop_schedule_context("5049", eta_test, today_df, df)
+    print(f"Test stop 5049 at {eta_test.strftime('%H:%M')}: scheduled={raw}, delta={delta:.0f}s")
+    print(f"Context: {ctx}")

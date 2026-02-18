@@ -1,7 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from gtfs_data import load_static_data, load_shapes, get_best_scheduled_time, get_schedule_context
-from realtime import fetch_realtime_updates, parse_time, determine_status_color
+from gtfs_data import (
+    load_static_data, load_shapes,
+    get_active_service_ids, filter_schedule_for_date,
+    get_stop_schedule_context, fmt_time
+)
+from realtime import fetch_realtime_updates, determine_status_color
 from datetime import datetime, timedelta
 import threading
 import time
@@ -18,16 +22,37 @@ app.add_middleware(
 )
 
 # global state for static data
-static_schedule = None
-trip_route_map = None
-stops_list = None
-shapes_data = None
+static_schedule    = None   # full schedule (all services)
+trip_route_map     = None
+stops_list         = None
+shapes_data        = None
+calendar_df        = None
+calendar_dates_df  = None
+trip_service_map   = None
+schedule_today     = None   # schedule filtered to today's active trips
+schedule_today_date = None  # date the filter was last computed
+
+
+def get_schedule_today():
+    """Return a schedule DataFrame filtered to today's active trips.
+    Re-filters whenever the calendar date advances (midnight rollover)."""
+    global schedule_today, schedule_today_date
+    today = datetime.now().date()
+    if schedule_today is None or schedule_today_date != today:
+        active = get_active_service_ids(calendar_df, calendar_dates_df, today)
+        schedule_today      = filter_schedule_for_date(static_schedule, trip_service_map, active)
+        schedule_today_date = today
+        print(f"[INFO] schedule_today refreshed for {today}: {len(schedule_today)} rows, active services: {active}", flush=True)
+    return schedule_today
 
 @app.on_event("startup")
 def startup_event():
     global static_schedule, trip_route_map, stops_list, shapes_data
-    static_schedule, trip_route_map, stops_list = load_static_data()
+    global calendar_df, calendar_dates_df, trip_service_map
+    static_schedule, trip_route_map, stops_list, calendar_df, calendar_dates_df, trip_service_map = load_static_data()
     shapes_data = load_shapes()
+    # Pre-warm today's filtered schedule
+    get_schedule_today()
 
 @app.get("/api/health")
 def health_check():
@@ -92,31 +117,26 @@ def get_stop_status(stop_id: str):
             continue
             
         predicted_unix = arrival['time']
-        stop_sequence = target_update.get('stop_sequence')  # exact visit identifier from realtime
         eta_dt = datetime.fromtimestamp(predicted_unix)
-        
-        # get scheduled time: use stop_sequence to pin the exact static row so
-        # the reference never flips between refreshes.
-        scheduled_time_str = get_best_scheduled_time(trip_id, stop_id, static_schedule, stop_sequence)
-        schedule_context = get_schedule_context(trip_id, stop_id, static_schedule, stop_sequence)
-        
+
+        # Schedules belong to the stop's timetable, not to individual trip_ids.
+        # Match this bus to the closest scheduled slot at this stop from today's
+        # active timetable — works even when the realtime trip_id belongs to an
+        # expired service period that the provider hasn't rotated out yet.
+        sched_today = get_schedule_today()
+        scheduled_time_str, schedule_context, delta = get_stop_schedule_context(
+            stop_id, eta_dt, sched_today, static_schedule
+        )
+
         # debug logging
-        print(f"[DEBUG] Trip: {trip_id}, Stop: {stop_id}, Seq: {stop_sequence}, ETA: {eta_dt} -> Scheduled: {scheduled_time_str}", flush=True)
-        
-        status = "Scheduled"
-        color = "Gray" # Default ETA color
-        delta = 0
-        
-        # determine status (lateness)
+        print(f"[DEBUG] Trip: {trip_id}, Stop: {stop_id}, ETA: {eta_dt.strftime('%H:%M:%S')} -> Scheduled: {scheduled_time_str} delta={delta:.0f}s", flush=True)
+
+        # determine status (lateness) from the computed delta
         if scheduled_time_str:
-            scheduled_dt = parse_time(scheduled_time_str)
-            if scheduled_dt:
-                delta = (eta_dt - scheduled_dt).total_seconds()
-                status, color = determine_status_color(delta)
+            status, color = determine_status_color(delta)
         else:
-            # trip exists in realtime but not in static at this time
-            status = "Added" 
-            color = "#3498db" # default Blue for added/live trips without schedule
+            status = "Scheduled"
+            color = "Green"
 
         # get route info
         route_info = trip_route_map.get(trip_id, {})
@@ -137,17 +157,7 @@ def get_stop_status(stop_id: str):
             continue # bus has passed
 
         # format scheduled time
-        formatted_schedule = None
-        if scheduled_time_str:
-            try:
-                # handle HH:MM:SS even if HH > 23 (GTFS valid)
-                h, m, s = map(int, scheduled_time_str.split(':'))
-                if h >= 24: h -= 24
-                # Create dummy dt for formatting
-                dummy_dt = datetime.now().replace(hour=h, minute=m, second=s)
-                formatted_schedule = dummy_dt.strftime("%I:%M %p").lstrip("0") # e.g. "9:00 PM"
-            except:
-                formatted_schedule = scheduled_time_str
+        formatted_schedule = fmt_time(scheduled_time_str) if scheduled_time_str else None
 
         buses.append({
             "trip_id": trip_id,
