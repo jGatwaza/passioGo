@@ -9,6 +9,7 @@ def load_static_data():
     Loads static GTFS data and returns:
     1. schedule_df: DataFrame with scheduled arrival times
     2. trip_route_map: Dictionary mapping trip_id -> {route_short_name, route_long_name, route_color, route_text_color}
+    3. stops_list: List of dicts with stop_id, stop_name, stop_lat, stop_lon
     """
     print("Loading Static GTFS data...")
     
@@ -38,9 +39,22 @@ def load_static_data():
             "color": f"#{row['route_color']}" if pd.notna(row['route_color']) else "#000000",
             "text_color": f"#{row['route_text_color']}" if pd.notna(row['route_text_color']) else "#FFFFFF"
         }
+
+    # Load stops
+    stops_path = os.path.join(STATIC_GTFS_DIR, "stops.txt")
+    stops_df = pd.read_csv(stops_path, dtype={'stop_id': str})
+    stops_list = []
+    for _, row in stops_df.iterrows():
+        if pd.notna(row['stop_lat']) and pd.notna(row['stop_lon']):
+            stops_list.append({
+                "stop_id": str(row['stop_id']),
+                "name": str(row['stop_name']) if pd.notna(row['stop_name']) else "Unknown Stop",
+                "lat": float(row['stop_lat']),
+                "lon": float(row['stop_lon']),
+            })
         
-    print(f"Loaded {len(schedule_df)} stop times and {len(trip_route_map)} trips.")
-    return schedule_df, trip_route_map
+    print(f"Loaded {len(schedule_df)} stop times, {len(trip_route_map)} trips, and {len(stops_list)} stops.")
+    return schedule_df, trip_route_map, stops_list
 
 def get_best_scheduled_time(trip_id, stop_id, schedule_df, stop_sequence=None):
     """

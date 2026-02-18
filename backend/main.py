@@ -20,15 +20,25 @@ app.add_middleware(
 # global state for static data
 static_schedule = None
 trip_route_map = None
+stops_list = None
 
 @app.on_event("startup")
 def startup_event():
-    global static_schedule, trip_route_map
-    static_schedule, trip_route_map = load_static_data()
+    global static_schedule, trip_route_map, stops_list
+    static_schedule, trip_route_map, stops_list = load_static_data()
 
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/api/stops")
+def get_all_stops():
+    """
+    Returns all stops from the static GTFS data with their coordinates and names.
+    """
+    if stops_list is None:
+        raise HTTPException(status_code=503, detail="Static data not loaded")
+    return {"stops": stops_list}
 
 @app.get("/api/stop/{stop_id}")
 def get_stop_status(stop_id: str):

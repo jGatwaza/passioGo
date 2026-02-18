@@ -1,159 +1,165 @@
 .bus-sheet-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100dvh;
-    z-index: 1000;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 1000;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 .bus-sheet-container {
-    background: white;
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
-    border-top-left-radius: 15px;
-    border-top-right-radius: 15px;
-    box-sizing: border-box;
-    pointer-events: auto;
-    animation: slideUp 0.3s ease-out;
-    padding-bottom: 20px;
-    max-height: 70dvh;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+  background: white;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-top-left-radius: 15px;
+  border-top-right-radius: 15px;
+  box-sizing: border-box;
+  pointer-events: auto;
+  animation: slideUp 0.3s ease-out;
+  padding-bottom: 20px;
+  max-height: 70dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bus-sheet-container::-webkit-scrollbar {
-    width: 6px;
+  width: 6px;
 }
 
 .bus-sheet-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
+  background: #f1f1f1;
 }
 
 .bus-sheet-container::-webkit-scrollbar-thumb {
-    background: #ccc;
-    border-radius: 3px;
+  background: #ccc;
+  border-radius: 3px;
 }
 
 @keyframes slideUp {
-    from {
-        transform: translateY(100%);
-    }
+  from {
+    transform: translateY(100%);
+  }
 
-    to {
-        transform: translateY(0);
-    }
+  to {
+    transform: translateY(0);
+  }
 }
 
 .sheet-handle {
-    width: 40px;
-    height: 5px;
-    background-color: #e0e0e0;
-    margin: 0 auto 20px;
-    margin-top: 20px;
+  width: 40px;
+  height: 5px;
+  background-color: #e0e0e0;
+  margin: 0 auto 12px;
+  margin-top: 20px;
+}
+
+.stop-name-header {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  text-align: center;
+  padding: 0 16px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 4px;
 }
 
 .sheet-header,
 .sheet-header h2,
 .close-btn {
-    display: none;
+  display: none;
 }
 
 .bus-item {
-    display: flex;
-    align-items: stretch;
-    overflow: hidden;
-    padding: 0;
-
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  padding: 0;
 }
 
 .bus-item-left {
-    flex: 4;
-    background-color: #e310d2;
-    padding: 25px;
-    display: flex;
-    align-items: center;
-    color: white;
+  flex: 4;
+  background-color: #e310d2;
+  padding: 25px;
+  display: flex;
+  align-items: center;
+  color: white;
 }
 
 .bus-item-right {
-    flex: 1;
-    background-color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px;
-    border-right: 5px solid #e310d2;
+  flex: 1;
+  background-color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border-right: 5px solid #e310d2;
 }
 
 .bus-icon-container {
-    margin-right: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  margin-right: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .bus-icon-img {
-    width: 32px;
-    height: auto;
-    object-fit: contain;
-    filter: brightness(0) invert(1);
+  width: 32px;
+  height: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
 }
 
 .bus-info {
-    flex: 1;
+  flex: 1;
 }
 
 .bus-header-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 
 .route-badge {
-    background-color: white;
-    color: #e310d2;
-    border: none;
-    border-radius: 4px;
-    padding: 2px 4px;
-    font-size: 0.8rem;
-    font-weight: 700;
-    line-height: 1;
+  background-color: white;
+  color: #e310d2;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
-
-
 .bus-name {
-    font-weight: 600;
-    font-size: 1.1rem;
-    color: white;
-    
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: white;
 }
 
 .bus-route {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
 }
 
 .bus-eta {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #007AFF;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    line-height: 1;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #007aff;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
 }
 
 .min-label {
-    font-size: 0.8rem;
-    font-weight: 400;
-    color: #999;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #999;
 }

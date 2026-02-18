@@ -42,22 +42,6 @@
 .tooltip-content {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.info-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background-color: #007AFF;
-  color: white;
-  font-size: 12px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: serif;
-  font-style: italic;
 }
 
 .stop-name {

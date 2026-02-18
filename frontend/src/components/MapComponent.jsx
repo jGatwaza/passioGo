@@ -1,42 +1,50 @@
-import React from 'react';
-import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import StopMarker from './StopMarker';
+import React from "react";
+import { MapContainer, TileLayer, useMapEvents } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import StopMarker from "./StopMarker";
 
-//marker positioning
-const CENTER_POSITION = [42.3800, -71.1250];
+const CENTER_POSITION = [42.374, -71.1195];
 
 const MapClickHandler = ({ onMapClick }) => {
-    useMapEvents({
-        click: () => {
-            onMapClick();
-        },
-    });
-    return null;
+  useMapEvents({
+    click: () => {
+      onMapClick();
+    },
+  });
+  return null;
 };
 
-const MapComponent = ({ onStopClick, onMapClick, selectedStop }) => {
-    return (
-        <MapContainer
-            center={CENTER_POSITION}
-            zoom={16}
-            style={{ height: '100%', width: '100%' }}
-            zoomControl={false}
-        >
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
+const MapComponent = ({
+  stops = [],
+  onStopClick,
+  onMapClick,
+  selectedStop,
+}) => {
+  return (
+    <MapContainer
+      center={CENTER_POSITION}
+      zoom={15}
+      style={{ height: "100%", width: "100%" }}
+      zoomControl={false}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
 
-            <StopMarker
-                position={[42.3820, -71.1255]}
-                name="Quad"
-                onClick={() => onStopClick({ name: "Quad" })}
-                isSelected={selectedStop && selectedStop.name === "Quad"}
-            />
-            <MapClickHandler onMapClick={onMapClick} />
-        </MapContainer>
-    );
+      {stops.map((stop) => (
+        <StopMarker
+          key={stop.stop_id}
+          position={[stop.lat, stop.lon]}
+          name={stop.name}
+          onClick={() => onStopClick(stop)}
+          isSelected={selectedStop && selectedStop.stop_id === stop.stop_id}
+        />
+      ))}
+
+      <MapClickHandler onMapClick={onMapClick} />
+    </MapContainer>
+  );
 };
 
 export default MapComponent;
