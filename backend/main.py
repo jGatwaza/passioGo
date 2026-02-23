@@ -7,6 +7,7 @@ from gtfs_data import (
 )
 from realtime import fetch_realtime_updates, determine_status_color
 from datetime import datetime, timedelta
+import math
 import threading
 import time
 
@@ -147,14 +148,15 @@ def get_stop_status(stop_id: str):
         # get vehicle label
         vehicle_label = entity.get('trip_update', {}).get('vehicle', {}).get('label', 'Unknown')
         
-        # calculate ETA in minutes from now
+        # calculate ETA from now
         now = datetime.now()
-        minutes_away = int((eta_dt - now).total_seconds() / 60)
-        
-        # display even if negative? Usually hide if too far past.
-        # let's show everything > -2 mins for now to be safe.
-        if minutes_away < -2:
-            continue # bus has passed
+        seconds_away = (eta_dt - now).total_seconds()
+
+        # Only keep future buses so each route shows the soonest upcoming ETA.
+        if seconds_away < 0:
+            continue
+
+        minutes_away = int(math.ceil(seconds_away / 60.0))
 
         # format scheduled time
         formatted_schedule = fmt_time(scheduled_time_str) if scheduled_time_str else None
@@ -167,7 +169,7 @@ def get_stop_status(stop_id: str):
             "bus_number": vehicle_label,
             "scheduled_time": formatted_schedule,
             "schedule_context": schedule_context,
-            "eta_min": minutes_away if minutes_away >= 0 else 0,
+            "eta_min": max(0, minutes_away),
             "status": status,
             "color": color,
             "route_color": route_color,

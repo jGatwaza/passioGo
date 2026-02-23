@@ -219,32 +219,22 @@ def fmt_time(time_str):
 
 def get_stop_schedule_context(stop_id, route_id, eta_dt, schedule_today, full_schedule=None):
     """
-    The canonical schedule lookup.  Schedules belong to stops, not individual
-    buses — the timetable for a stop is the source of truth.
+     Schedule lookup anchored on *now* for a specific stop + route.
 
-    Given a stop and a bus's predicted arrival datetime (`eta_dt`):
+     Behavior:
+        1. Build today's unique timetable slots for (stop_id, route_id).
+        2. Define "current" as the first slot >= now (or the last slot if all are past).
+        3. Return context around that current slot: past/current/next.
+        4. Compute delta against the current slot, but guard against stale history:
+            - if current slot is too far in the past, force delta=0
+            - if eta is unrealistically far from current slot, force delta=0
 
-    1. Collect every unique scheduled arrival time at `stop_id`.  Uses
-       `full_schedule` (all service periods) if provided and `schedule_today`
-       has fewer than 2 slots for the stop, so that stops served by recently
-       expired but still-operating service periods are matched correctly.
-
-    2. Find the scheduled slot whose time is closest to `eta_dt`.  This
-       matches the bus to its intended slot regardless of whether the realtime
-       trip_id is in this period’s static feed.
-
-    3. Apply a sanity cap: if the closest slot is > 45 minutes away the match
-       is unreliable (the stop has no plausible scheduled arrival near this bus).
-       In that case return delta=0 / color=Green so the bus shows as On Time
-       rather than wildly early or late.
-
-    Returns: (scheduled_raw_str, context_dict, delta_sec)
-      scheduled_raw  – HH:MM:SS for formatting/logging  (None if no match)
-      context        – {"past": fmt, "current": fmt, "next": fmt}
-      delta_sec      – (eta_dt − scheduled_dt).total_seconds(); 0 if no match
+     Returns: (scheduled_raw_str, context_dict, delta_sec)
     """
     now  = datetime.now()
     base = now.date()
+    stale_past_cutoff_sec = 30 * 60
+    max_deviation_anchor_sec = 60 * 60
 
     def _build_times(df):
         rows = df[(df['stop_id'] == str(stop_id)) & (df['route_id'] == str(route_id))]
@@ -258,14 +248,10 @@ def get_stop_schedule_context(stop_id, route_id, eta_dt, schedule_today, full_sc
 
     times = _build_times(schedule_today)
 
-    # Fall back to full schedule when today's slice is too sparse
-    if len(times) < 2 and full_schedule is not None:
-        times = _build_times(full_schedule)
-
     if not times:
         return None, {"past": None, "current": None, "next": None}, 0
 
-    # Anchor: first scheduled time >= NOW -- stable across polls.
+    # Anchor: first scheduled time >= NOW (source of truth for "current").
     current_idx = next(
         (i for i, (_, dt) in enumerate(times) if dt >= now),
         len(times) - 1
@@ -274,8 +260,12 @@ def get_stop_schedule_context(stop_id, route_id, eta_dt, schedule_today, full_sc
     scheduled_raw, scheduled_dt = times[current_idx]
     delta_sec = (eta_dt - scheduled_dt).total_seconds()
 
-    # Sanity cap: sparse stops may have no close match -- show On Time.
-    if abs(delta_sec) > 45 * 60:
+    # Do not base deviation on schedules that are way back in the past.
+    if (now - scheduled_dt).total_seconds() > stale_past_cutoff_sec:
+        delta_sec = 0
+
+    # Sanity cap: sparse/irregular matches should not produce wild colors.
+    if abs(delta_sec) > max_deviation_anchor_sec:
         delta_sec = 0
 
     past_str    = fmt_time(times[current_idx - 1][0]) if current_idx > 0 else None
