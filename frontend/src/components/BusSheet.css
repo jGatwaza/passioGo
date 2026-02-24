@@ -21,21 +21,27 @@
   box-sizing: border-box;
   pointer-events: auto;
   animation: slideUp 0.3s ease-out;
-  padding-bottom: 20px;
   max-height: 70dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.bus-items-scroll {
+  flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-.bus-sheet-container::-webkit-scrollbar {
+.bus-items-scroll::-webkit-scrollbar {
   width: 6px;
 }
 
-.bus-sheet-container::-webkit-scrollbar-track {
+.bus-items-scroll::-webkit-scrollbar-track {
   background: #f1f1f1;
 }
 
-.bus-sheet-container::-webkit-scrollbar-thumb {
+.bus-items-scroll::-webkit-scrollbar-thumb {
   background: #ccc;
   border-radius: 3px;
 }
@@ -48,6 +54,12 @@
   to {
     transform: translateY(0);
   }
+}
+
+.sheet-drag-zone {
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
 }
 
 .sheet-handle {

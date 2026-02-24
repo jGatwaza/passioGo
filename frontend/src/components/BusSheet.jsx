@@ -8,31 +8,85 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
   const [expandedBuses, setExpandedBuses] = useState(new Set());
 
   const containerRef = useRef(null);
+  const handleRef = useRef(null);
   const touchStartY = useRef(null);
   const isDragging = useRef(false);
+  const dragYRef = useRef(0);
 
-  // Swipe-down to close
-  const handleTouchStart = useCallback((e) => {
-    if (containerRef.current && containerRef.current.scrollTop > 0) return;
-    touchStartY.current = e.touches[0].clientY;
+  // Unified drag helpers — use refs so callbacks stay stable
+  const startDrag = useCallback((clientY) => {
+    touchStartY.current = clientY;
     isDragging.current = true;
   }, []);
 
-  const handleTouchMove = useCallback((e) => {
+  const moveDrag = useCallback((clientY) => {
     if (!isDragging.current || touchStartY.current === null) return;
-    const delta = e.touches[0].clientY - touchStartY.current;
+    const delta = clientY - touchStartY.current;
     if (delta > 0) {
+      dragYRef.current = delta;
       setDragY(delta);
-      e.preventDefault();
     }
   }, []);
 
-  const handleTouchEnd = useCallback(() => {
-    if (dragY > 80) onClose();
+  const endDrag = useCallback(() => {
+    if (dragYRef.current > 80) onClose();
+    dragYRef.current = 0;
     setDragY(0);
     touchStartY.current = null;
     isDragging.current = false;
-  }, [dragY, onClose]);
+  }, [onClose]);
+
+  // Native touch listeners on the drag-zone (non-passive so preventDefault works)
+  useEffect(() => {
+    const zone = handleRef.current;
+    if (!zone) return;
+
+    const onTouchStart = (e) => {
+      startDrag(e.touches[0].clientY);
+    };
+    const onTouchMove = (e) => {
+      if (!isDragging.current) return;
+      const delta = e.touches[0].clientY - touchStartY.current;
+      if (delta > 0) {
+        e.preventDefault(); // works because listener is {passive:false}
+        dragYRef.current = delta;
+        setDragY(delta);
+      }
+    };
+    const onTouchEnd = () => endDrag();
+
+    zone.addEventListener("touchstart", onTouchStart, { passive: true });
+    zone.addEventListener("touchmove", onTouchMove, { passive: false });
+    zone.addEventListener("touchend", onTouchEnd);
+    return () => {
+      zone.removeEventListener("touchstart", onTouchStart);
+      zone.removeEventListener("touchmove", onTouchMove);
+      zone.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [startDrag, endDrag]);
+
+  // Native mouse listeners — mousedown on drag-zone, move/up on document
+  useEffect(() => {
+    const zone = handleRef.current;
+    if (!zone) return;
+
+    const onMouseDown = (e) => {
+      startDrag(e.clientY);
+      e.preventDefault();
+
+      const onMouseMove = (ev) => moveDrag(ev.clientY);
+      const onMouseUp = () => {
+        endDrag();
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      };
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    };
+
+    zone.addEventListener("mousedown", onMouseDown);
+    return () => zone.removeEventListener("mousedown", onMouseDown);
+  }, [startDrag, moveDrag, endDrag]);
 
   const toggleExpanded = useCallback((routeId) => {
     setExpandedBuses((prev) => {
@@ -167,17 +221,15 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
         ref={containerRef}
         className="bus-sheet-container"
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
         style={{
           transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
           transition: dragY > 0 ? "none" : "transform 0.3s ease",
         }}
       >
-        <div className="sheet-handle"></div>
-        <div className="stop-name-header">{stop.name}</div>
-
+        <div className="sheet-drag-zone" ref={handleRef}>
+          <div className="sheet-handle"></div>
+          <div className="stop-name-header">{stop.name}</div>
+        </div>
         {/* Column headers + legend */}
         <div className="bus-sheet-col-headers">
           <div className="col-headers-top">
@@ -207,7 +259,6 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
             </span>
           </div>
         </div>
-
         {/* Off-schedule popup */}
         {offSchedPopup && (
           <div className="off-sched-popup">
@@ -234,120 +285,121 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
             </div>
           </div>
         )}
-
-        {loading ? (
-          <div
-            className="bus-item"
-            style={{ justifyContent: "center", padding: "20px" }}
-          >
-            Loading...
-          </div>
-        ) : (
-          (() => {
-            // Build a set of route names that have active buses
-            const activeRouteNames = new Set(
-              (busData || []).map((b) => b.route_name),
-            );
-
-            // Build the merged list: active buses first, then inactive toggled routes
-            const activeBuses = (busData || []).filter((b) =>
-              visibleRoutes.some((r) => r.name === b.route_name),
-            );
-            const inactiveRoutes = visibleRoutes.filter(
-              (r) => !activeRouteNames.has(r.name),
-            );
-
-            if (activeBuses.length === 0 && inactiveRoutes.length === 0) {
-              return (
-                <div
-                  className="bus-item"
-                  style={{ justifyContent: "center", padding: "20px" }}
-                >
-                  No upcoming buses found.
-                </div>
+        <div className="bus-items-scroll">
+          {loading ? (
+            <div
+              className="bus-item"
+              style={{ justifyContent: "center", padding: "20px" }}
+            >
+              Loading...
+            </div>
+          ) : (
+            (() => {
+              // Build a set of route names that have active buses
+              const activeRouteNames = new Set(
+                (busData || []).map((b) => b.route_name),
               );
-            }
 
-            return (
-              <>
-                {activeBuses.map((bus, index) => {
-                  const expandKey = bus.route_id || bus.trip_id || index;
-                  const expanded = expandedBuses.has(expandKey);
-                  return (
+              // Build the merged list: active buses first, then inactive toggled routes
+              const activeBuses = (busData || []).filter((b) =>
+                visibleRoutes.some((r) => r.name === b.route_name),
+              );
+              const inactiveRoutes = visibleRoutes.filter(
+                (r) => !activeRouteNames.has(r.name),
+              );
+
+              if (activeBuses.length === 0 && inactiveRoutes.length === 0) {
+                return (
+                  <div
+                    className="bus-item"
+                    style={{ justifyContent: "center", padding: "20px" }}
+                  >
+                    No upcoming buses found.
+                  </div>
+                );
+              }
+
+              return (
+                <>
+                  {activeBuses.map((bus, index) => {
+                    const expandKey = bus.route_id || bus.trip_id || index;
+                    const expanded = expandedBuses.has(expandKey);
+                    return (
+                      <div
+                        key={expandKey}
+                        className={`bus-item${expanded ? " bus-item--expanded" : ""}`}
+                        onClick={() => {
+                          toggleExpanded(expandKey);
+                          if (bus.color === "Black" && !expanded) {
+                            showOffSchedulePopup(bus);
+                          }
+                        }}
+                      >
+                        <div
+                          className="bus-item-left"
+                          style={{
+                            backgroundColor: bus.route_color || "#e310d2",
+                          }}
+                        >
+                          <div className="bus-info">
+                            <div className="bus-header-row">
+                              <span
+                                className="route-badge"
+                                style={{ color: bus.route_color || "#e310d2" }}
+                              >
+                                {bus.route_badge}
+                              </span>
+                              <span className="bus-name">{bus.route_name}</span>
+                            </div>
+                            <div className="bus-route">
+                              Bus {bus.bus_number}
+                              {!expanded && bus.scheduled_time && (
+                                <span className="bus-scheduled-inline">
+                                  {" "}
+                                  • Scheduled: {bus.scheduled_time}
+                                </span>
+                              )}
+                            </div>
+                            {expanded && renderScheduleContext(bus)}
+                          </div>
+                        </div>
+                        <div
+                          className="bus-item-right"
+                          style={{
+                            borderRight: `5px solid ${bus.route_color || "#e310d2"}`,
+                          }}
+                        >
+                          {renderEta(bus, expanded)}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {inactiveRoutes.map((route) => (
                     <div
-                      key={expandKey}
-                      className={`bus-item${expanded ? " bus-item--expanded" : ""}`}
-                      onClick={() => {
-                        toggleExpanded(expandKey);
-                        if (bus.color === "Black" && !expanded) {
-                          showOffSchedulePopup(bus);
-                        }
-                      }}
+                      key={`inactive-${route.name}`}
+                      className="bus-item bus-item--inactive"
                     >
                       <div
-                        className="bus-item-left"
-                        style={{
-                          backgroundColor: bus.route_color || "#e310d2",
-                        }}
+                        className="bus-item-left bus-item-left--inactive"
+                        style={{ backgroundColor: route.color || "#e310d2" }}
                       >
                         <div className="bus-info">
                           <div className="bus-header-row">
-                            <span
-                              className="route-badge"
-                              style={{ color: bus.route_color || "#e310d2" }}
-                            >
-                              {bus.route_badge}
-                            </span>
-                            <span className="bus-name">{bus.route_name}</span>
+                            <span className="bus-name">{route.name}</span>
                           </div>
-                          <div className="bus-route">
-                            Bus {bus.bus_number}
-                            {!expanded && bus.scheduled_time && (
-                              <span className="bus-scheduled-inline">
-                                {" "}
-                                • Scheduled: {bus.scheduled_time}
-                              </span>
-                            )}
+                          <div className="bus-route bus-route--inactive">
+                            No active trips
                           </div>
-                          {expanded && renderScheduleContext(bus)}
-                        </div>
-                      </div>
-                      <div
-                        className="bus-item-right"
-                        style={{
-                          borderRight: `5px solid ${bus.route_color || "#e310d2"}`,
-                        }}
-                      >
-                        {renderEta(bus, expanded)}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {inactiveRoutes.map((route) => (
-                  <div
-                    key={`inactive-${route.name}`}
-                    className="bus-item bus-item--inactive"
-                  >
-                    <div
-                      className="bus-item-left bus-item-left--inactive"
-                      style={{ backgroundColor: route.color || "#e310d2" }}
-                    >
-                      <div className="bus-info">
-                        <div className="bus-header-row">
-                          <span className="bus-name">{route.name}</span>
-                        </div>
-                        <div className="bus-route bus-route--inactive">
-                          No active trips
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </>
-            );
-          })()
-        )}
+                  ))}
+                </>
+              );
+            })()
+          )}{" "}
+        </div>{" "}
       </div>
     </div>
   );

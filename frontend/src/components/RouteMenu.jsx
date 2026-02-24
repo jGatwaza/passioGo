@@ -52,7 +52,6 @@ const RouteMenu = ({
       {showToast && (
         <div className="active-only-toast">
           <div className="active-only-toast-content">
-            <span className="active-only-toast-icon">🚌</span>
             <span className="active-only-toast-text">
               Only routes with active buses are being shown
             </span>
