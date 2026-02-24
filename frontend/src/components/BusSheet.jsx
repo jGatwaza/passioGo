@@ -163,6 +163,7 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
     const absDelta = Math.abs(bus.delta_sec);
     const deltaMin = Math.round(absDelta / 60);
     const showTag = expanded && absDelta > 60;
+    const displayEta = bus.eta_min > 40 ? ">40" : bus.eta_min;
 
     return (
       <div className="bus-eta" style={{ color }}>
@@ -170,7 +171,7 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
           <span className="eta-number eta-arrived">Arrived</span>
         ) : (
           <>
-            <span className="eta-number">{bus.eta_min}</span>
+            <span className="eta-number">{displayEta}</span>
             <span className="min-label">
               {bus.eta_min === 1 ? "Minute" : "Minutes"}
             </span>
