@@ -161,7 +161,7 @@ def get_stop_status(stop_id: str):
         if seconds_away < 0:
             continue
 
-        minutes_away = int(math.ceil(seconds_away / 60.0))
+        minutes_away = int(seconds_away // 60)
 
         # format scheduled time
         formatted_schedule = fmt_time(scheduled_time_str) if scheduled_time_str else None
@@ -318,7 +318,7 @@ def get_active_vehicles():
                 if predicted_unix and next_stop_id:
                     eta_dt = datetime.fromtimestamp(predicted_unix)
                     seconds_away = (eta_dt - now).total_seconds()
-                    eta_min = max(0, int(math.ceil(seconds_away / 60.0)))
+                    eta_min = max(0, int(seconds_away // 60))
 
                     scheduled_time_str, _, delta = get_stop_schedule_context(
                         next_stop_id, route_id, eta_dt, sched_today, static_schedule

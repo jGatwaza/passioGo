@@ -129,6 +129,28 @@ def load_shapes():
             "points": points,
         })
 
+    # Normalize known problematic geometry: some Quad variants can include noisy
+    # shape segments; force them to use the best-defined Crimson Cruiser geometry.
+    crimson_shapes = [
+        s for s in shapes_list
+        if (s.get("route_name") or "").strip().lower() == "crimson cruiser"
+    ]
+    canonical_crimson = max(crimson_shapes, key=lambda s: len(s.get("points", [])), default=None)
+
+    if canonical_crimson and canonical_crimson.get("points"):
+        crimson_points = [p[:] for p in canonical_crimson["points"]]
+        target_route_names = {"quad yard express", "quad sec direct"}
+        replaced = 0
+        for shape in shapes_list:
+            if (shape.get("route_name") or "").strip().lower() in target_route_names:
+                shape["points"] = [p[:] for p in crimson_points]
+                replaced += 1
+        if replaced:
+            print(
+                f"[INFO] Replaced {replaced} Quad variant shape(s) with Crimson Cruiser geometry.",
+                flush=True,
+            )
+
     print(f"Loaded {len(shapes_list)} route shapes.")
     return shapes_list
 

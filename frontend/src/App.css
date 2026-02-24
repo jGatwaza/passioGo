@@ -7,7 +7,7 @@
 
 .recenter-btn {
   position: fixed;
-  right: 20px;
+  left: 20px;
   bottom: 20px;
   width: 46px;
   height: 46px;
@@ -26,5 +26,5 @@
 }
 
 .recenter-btn--above-sheet {
-  bottom: calc(70dvh + 10px);
+  bottom: calc(91dvh + 10px);
 }

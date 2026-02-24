@@ -168,7 +168,7 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
     return (
       <div className="bus-eta" style={{ color }}>
         {bus.eta_min <= 0 ? (
-          <span className="eta-number eta-arrived">Arrived</span>
+          <span className="eta-number eta-arrived">Arriving</span>
         ) : (
           <>
             <span className="eta-number">{displayEta}</span>

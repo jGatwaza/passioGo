@@ -1,9 +1,21 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Marker, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import "./BusMarker.css";
 
+const JITTER_THRESHOLD_METERS = 8;
+const TRANSITION_DURATION_MS = 7600;
+
 const easeInOut = (t) => t * t * (3 - 2 * t);
+
+const distanceMeters = (from, to) => {
+  const latScale = 111320;
+  const avgLatRad = ((from.lat + to.lat) / 2) * (Math.PI / 180);
+  const lonScale = 111320 * Math.cos(avgLatRad);
+  const dy = (to.lat - from.lat) * latScale;
+  const dx = (to.lon - from.lon) * lonScale;
+  return Math.sqrt(dx * dx + dy * dy);
+};
 
 const createBusIcon = (routeColor, bearing) =>
   L.divIcon({
@@ -18,6 +30,7 @@ const createBusIcon = (routeColor, bearing) =>
 const BusMarker = ({ vehicle }) => {
   const markerRef = useRef(null);
   const currentPosRef = useRef({ lat: vehicle.lat, lon: vehicle.lon });
+  const [initialPosition] = useState(() => [vehicle.lat, vehicle.lon]);
   const animationFrameRef = useRef(null);
 
   useEffect(() => {
@@ -32,13 +45,22 @@ const BusMarker = ({ vehicle }) => {
     if (!marker) return;
 
     const from = { ...currentPosRef.current };
-    const to = { lat: vehicle.lat, lon: vehicle.lon };
+    const rawTarget = { lat: vehicle.lat, lon: vehicle.lon };
+
+    const distance = distanceMeters(from, rawTarget);
+    const to =
+      distance < JITTER_THRESHOLD_METERS
+        ? {
+            lat: from.lat + (rawTarget.lat - from.lat) * 0.25,
+            lon: from.lon + (rawTarget.lon - from.lon) * 0.25,
+          }
+        : rawTarget;
 
     if (animationFrameRef.current)
       cancelAnimationFrame(animationFrameRef.current);
 
     const start = performance.now();
-    const duration = 5500;
+    const duration = TRANSITION_DURATION_MS;
 
     const step = (now) => {
       const raw = Math.min(1, (now - start) / duration);
@@ -63,7 +85,7 @@ const BusMarker = ({ vehicle }) => {
   );
 
   return (
-    <Marker ref={markerRef} position={[vehicle.lat, vehicle.lon]} icon={icon}>
+    <Marker ref={markerRef} position={initialPosition} icon={icon}>
       <Tooltip direction="top" offset={[0, -14]} opacity={1}>
         <div className="bus-tooltip">
           <div className="bus-tooltip-title">
