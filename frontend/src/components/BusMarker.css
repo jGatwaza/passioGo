@@ -1,0 +1,44 @@
+.custom-bus-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bus-marker-shell {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--route-color);
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bus-marker-arrow {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 11px solid #ffffff;
+  transform-origin: center center;
+}
+
+.bus-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+}
+
+.bus-tooltip-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.bus-tooltip-sub {
+  font-size: 11px;
+  font-weight: 600;
+}

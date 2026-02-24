@@ -8,6 +8,9 @@ function App() {
   const [selectedStop, setSelectedStop] = useState(null);
   const [stops, setStops] = useState([]);
   const [shapes, setShapes] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [showRecenter, setShowRecenter] = useState(false);
+  const [recenterRequestToken, setRecenterRequestToken] = useState(0);
   const [hiddenRoutes, setHiddenRoutes] = useState(new Set());
   const [activeOnly, setActiveOnly] = useState(false);
   const [activeRouteNames, setActiveRouteNames] = useState(new Set());
@@ -22,6 +25,30 @@ function App() {
       .then((res) => res.json())
       .then((data) => setShapes(data.shapes || []))
       .catch((err) => console.error("Failed to load shapes:", err));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchVehicles = () => {
+      fetch("http://localhost:8000/api/vehicles")
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cancelled) {
+            setVehicles(data.vehicles || []);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load vehicles:", err);
+        });
+    };
+
+    fetchVehicles();
+    const id = setInterval(fetchVehicles, 6000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   // Periodically fetch active route names when activeOnly is on
@@ -85,6 +112,14 @@ function App() {
     [shapes, effectiveHidden],
   );
 
+  const visibleVehicles = useMemo(
+    () =>
+      vehicles.filter(
+        (v) => !effectiveHidden.has(v.route_name || "Unknown Route"),
+      ),
+    [vehicles, effectiveHidden],
+  );
+
   const handleStopClick = (stop) => {
     setSelectedStop(stop);
   };
@@ -93,15 +128,37 @@ function App() {
     setSelectedStop(null);
   };
 
+  const handleOutOfBoundsChange = useCallback((isOutOfBounds) => {
+    setShowRecenter(isOutOfBounds);
+  }, []);
+
+  const handleRecenter = useCallback(() => {
+    setRecenterRequestToken((prev) => prev + 1);
+    setShowRecenter(false);
+  }, []);
+
   return (
     <div className="app-container">
       <MapComponent
         stops={stops}
         shapes={visibleShapes}
+        vehicles={visibleVehicles}
         onStopClick={handleStopClick}
         onMapClick={handleCloseSheet}
+        onOutOfBoundsChange={handleOutOfBoundsChange}
+        recenterRequestToken={recenterRequestToken}
         selectedStop={selectedStop}
       />
+      {showRecenter && (
+        <button
+          className={`recenter-btn${selectedStop ? " recenter-btn--above-sheet" : ""}`}
+          onClick={handleRecenter}
+          aria-label="Recenter map"
+          title="Recenter map"
+        >
+          ⌖
+        </button>
+      )}
       <RouteMenu
         routes={uniqueRoutes}
         hiddenRoutes={effectiveHidden}

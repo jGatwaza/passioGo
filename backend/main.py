@@ -5,7 +5,7 @@ from gtfs_data import (
     get_active_service_ids, filter_schedule_for_date,
     get_stop_schedule_context, fmt_time
 )
-from realtime import fetch_realtime_updates, determine_status_color
+from realtime import fetch_realtime_updates, fetch_vehicle_positions, determine_status_color
 from datetime import datetime, timedelta
 import math
 import threading
@@ -238,6 +238,124 @@ def get_active_routes():
                     break
 
     return {"active_routes": sorted(active_names)}
+
+
+@app.get("/api/vehicles")
+def get_active_vehicles():
+    """
+    Returns active buses with current coordinates, heading, route info,
+    and realtime ETA status color (on-time/early/late/off-schedule).
+    """
+    global trip_route_map
+    if trip_route_map is None:
+        raise HTTPException(status_code=503, detail="Static data not loaded")
+
+    vehicle_data = fetch_vehicle_positions()
+    if not vehicle_data or "entity" not in vehicle_data:
+        raise HTTPException(status_code=502, detail="Failed to fetch vehicle position data")
+
+    trip_updates = fetch_realtime_updates() or {}
+    trip_update_index = {}
+    for entity in trip_updates.get("entity", []):
+        trip_update = entity.get("trip_update")
+        if not trip_update:
+            continue
+        trip_id = trip_update.get("trip", {}).get("trip_id")
+        if trip_id:
+            trip_update_index[str(trip_id)] = trip_update
+
+    now = datetime.now()
+    now_ts = int(now.timestamp())
+    sched_today = get_schedule_today()
+
+    vehicles = []
+    for entity in vehicle_data["entity"]:
+        vehicle_wrap = entity.get("vehicle")
+        if not vehicle_wrap:
+            continue
+
+        trip_id = str(vehicle_wrap.get("trip", {}).get("trip_id", "")).strip()
+        position = vehicle_wrap.get("position") or {}
+        lat = position.get("latitude")
+        lon = position.get("longitude")
+        if lat is None or lon is None:
+            continue
+
+        route_info = trip_route_map.get(trip_id, {})
+        route_id = route_info.get("route_id", "")
+        route_name = route_info.get("long_name") or route_info.get("short_name") or "Unknown Route"
+        route_badge = route_info.get("short_name") or "Bus"
+        route_color = route_info.get("color") or "#e310d2"
+
+        vehicle_info = vehicle_wrap.get("vehicle") or {}
+        vehicle_id = str(vehicle_info.get("id", "")).strip()
+        vehicle_label = vehicle_info.get("label") or "Unknown"
+
+        status = "Off Schedule"
+        color = "Black"
+        eta_min = None
+        delta_sec = 0
+
+        trip_update = trip_update_index.get(trip_id)
+        if trip_update:
+            stop_updates = trip_update.get("stop_time_update", [])
+            next_update = None
+
+            for upd in stop_updates:
+                arrival = upd.get("arrival")
+                if arrival and "time" in arrival and int(arrival["time"]) >= now_ts:
+                    next_update = upd
+                    break
+
+            if next_update is None and stop_updates:
+                next_update = stop_updates[0]
+
+            if next_update:
+                arrival = next_update.get("arrival") or {}
+                predicted_unix = arrival.get("time")
+                next_stop_id = next_update.get("stop_id")
+
+                if predicted_unix and next_stop_id:
+                    eta_dt = datetime.fromtimestamp(predicted_unix)
+                    seconds_away = (eta_dt - now).total_seconds()
+                    eta_min = max(0, int(math.ceil(seconds_away / 60.0)))
+
+                    scheduled_time_str, _, delta = get_stop_schedule_context(
+                        next_stop_id, route_id, eta_dt, sched_today, static_schedule
+                    )
+
+                    if scheduled_time_str:
+                        if delta == float("inf") or delta == float("-inf"):
+                            status = "Off Schedule"
+                            color = "Black"
+                            delta_sec = 0
+                        else:
+                            status, color = determine_status_color(delta)
+                            delta_sec = delta
+
+        vehicles.append({
+            "vehicle_id": vehicle_id,
+            "bus_number": vehicle_label,
+            "trip_id": trip_id,
+            "route_id": route_id,
+            "route_name": route_name,
+            "route_badge": route_badge,
+            "route_color": route_color,
+            "lat": float(lat),
+            "lon": float(lon),
+            "bearing": float(position.get("bearing", 0) or 0),
+            "speed": float(position.get("speed", 0) or 0),
+            "status": status,
+            "color": color,
+            "delta_sec": delta_sec,
+            "eta_min": eta_min,
+            "position_timestamp": vehicle_wrap.get("timestamp"),
+        })
+
+    return {
+        "timestamp": vehicle_data.get("header", {}).get("timestamp"),
+        "vehicles": vehicles,
+    }
 
 
 if __name__ == "__main__":

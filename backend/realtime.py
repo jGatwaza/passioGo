@@ -5,6 +5,7 @@ import pandas as pd
 
 # realtime URL
 REALTIME_URL = "https://passio3.com/harvard/passioTransit/gtfs/realtime/tripUpdates.json"
+VEHICLE_POSITIONS_URL = "https://passio3.com/harvard/passioTransit/gtfs/realtime/vehiclePositions.json"
 
 def fetch_realtime_updates():
     """
@@ -19,6 +20,22 @@ def fetch_realtime_updates():
         return None
     except Exception as e:
         print(f"Error fetching realtime data: {e}")
+        return None
+
+
+def fetch_vehicle_positions():
+    """
+    Fetches the latest GTFS Realtime Vehicle Positions JSON feed.
+    Returns: Parsed JSON content or None on failure.
+    """
+    try:
+        response = requests.get(VEHICLE_POSITIONS_URL)
+        if response.status_code == 200:
+            return response.json()
+        print(f"Failed to fetch vehicle positions: {response.status_code}")
+        return None
+    except Exception as e:
+        print(f"Error fetching vehicle positions: {e}")
         return None
 
 def parse_time(time_str):
