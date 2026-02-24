@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import "./BusSheet.css";
 
-const BusSheet = ({ stop, onClose }) => {
+const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
   const [busData, setBusData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dragY, setDragY] = useState(0);
@@ -112,9 +112,6 @@ const BusSheet = ({ stop, onClose }) => {
               : `LATE ${deltaMin} min`}
           </span>
         )}
-        {expanded && bus.also_in_min != null && (
-          <span className="eta-also-in">Also in {bus.also_in_min} min</span>
-        )}
       </div>
     );
   };
@@ -192,60 +189,106 @@ const BusSheet = ({ stop, onClose }) => {
           >
             Loading...
           </div>
-        ) : busData && busData.length > 0 ? (
-          busData.map((bus, index) => {
-            const expandKey = bus.route_id || bus.trip_id || index;
-            const expanded = expandedBuses.has(expandKey);
-            return (
-              <div
-                key={expandKey}
-                className={`bus-item${expanded ? " bus-item--expanded" : ""}`}
-                onClick={() => toggleExpanded(expandKey)}
-              >
-                <div
-                  className="bus-item-left"
-                  style={{ backgroundColor: bus.route_color || "#e310d2" }}
-                >
-                  <div className="bus-info">
-                    <div className="bus-header-row">
-                      <span
-                        className="route-badge"
-                        style={{ color: bus.route_color || "#e310d2" }}
-                      >
-                        {bus.route_badge}
-                      </span>
-                      <span className="bus-name">{bus.route_name}</span>
-                    </div>
-                    <div className="bus-route">
-                      Bus {bus.bus_number}
-                      {!expanded && bus.scheduled_time && (
-                        <span className="bus-scheduled-inline">
-                          {" "}
-                          • Scheduled: {bus.scheduled_time}
-                        </span>
-                      )}
-                    </div>
-                    {expanded && renderScheduleContext(bus)}
-                  </div>
-                </div>
-                <div
-                  className="bus-item-right"
-                  style={{
-                    borderRight: `5px solid ${bus.route_color || "#e310d2"}`,
-                  }}
-                >
-                  {renderEta(bus, expanded)}
-                </div>
-              </div>
-            );
-          })
         ) : (
-          <div
-            className="bus-item"
-            style={{ justifyContent: "center", padding: "20px" }}
-          >
-            No upcoming buses found.
-          </div>
+          (() => {
+            // Build a set of route names that have active buses
+            const activeRouteNames = new Set(
+              (busData || []).map((b) => b.route_name),
+            );
+
+            // Build the merged list: active buses first, then inactive toggled routes
+            const activeBuses = (busData || []).filter((b) =>
+              visibleRoutes.some((r) => r.name === b.route_name),
+            );
+            const inactiveRoutes = visibleRoutes.filter(
+              (r) => !activeRouteNames.has(r.name),
+            );
+
+            if (activeBuses.length === 0 && inactiveRoutes.length === 0) {
+              return (
+                <div
+                  className="bus-item"
+                  style={{ justifyContent: "center", padding: "20px" }}
+                >
+                  No upcoming buses found.
+                </div>
+              );
+            }
+
+            return (
+              <>
+                {activeBuses.map((bus, index) => {
+                  const expandKey = bus.route_id || bus.trip_id || index;
+                  const expanded = expandedBuses.has(expandKey);
+                  return (
+                    <div
+                      key={expandKey}
+                      className={`bus-item${expanded ? " bus-item--expanded" : ""}`}
+                      onClick={() => toggleExpanded(expandKey)}
+                    >
+                      <div
+                        className="bus-item-left"
+                        style={{
+                          backgroundColor: bus.route_color || "#e310d2",
+                        }}
+                      >
+                        <div className="bus-info">
+                          <div className="bus-header-row">
+                            <span
+                              className="route-badge"
+                              style={{ color: bus.route_color || "#e310d2" }}
+                            >
+                              {bus.route_badge}
+                            </span>
+                            <span className="bus-name">{bus.route_name}</span>
+                          </div>
+                          <div className="bus-route">
+                            Bus {bus.bus_number}
+                            {!expanded && bus.scheduled_time && (
+                              <span className="bus-scheduled-inline">
+                                {" "}
+                                • Scheduled: {bus.scheduled_time}
+                              </span>
+                            )}
+                          </div>
+                          {expanded && renderScheduleContext(bus)}
+                        </div>
+                      </div>
+                      <div
+                        className="bus-item-right"
+                        style={{
+                          borderRight: `5px solid ${bus.route_color || "#e310d2"}`,
+                        }}
+                      >
+                        {renderEta(bus, expanded)}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {inactiveRoutes.map((route) => (
+                  <div
+                    key={`inactive-${route.name}`}
+                    className="bus-item bus-item--inactive"
+                  >
+                    <div
+                      className="bus-item-left bus-item-left--inactive"
+                      style={{ backgroundColor: route.color || "#e310d2" }}
+                    >
+                      <div className="bus-info">
+                        <div className="bus-header-row">
+                          <span className="bus-name">{route.name}</span>
+                        </div>
+                        <div className="bus-route bus-route--inactive">
+                          No active trips
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            );
+          })()
         )}
       </div>
     </div>

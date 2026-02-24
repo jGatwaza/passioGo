@@ -336,3 +336,26 @@
 .sched-slot.empty .sched-slot-time {
   opacity: 0.3;
 }
+
+/* ── Inactive route items (no active trips) ───────────── */
+.bus-item.bus-item--inactive {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.bus-item-left.bus-item-left--inactive {
+  flex: 1;
+  padding: 18px 25px;
+}
+
+.bus-item--inactive .bus-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.bus-route.bus-route--inactive {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}

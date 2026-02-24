@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import MapComponent from "./components/MapComponent";
 import BusSheet from "./components/BusSheet";
 import RouteMenu from "./components/RouteMenu";
@@ -9,6 +9,8 @@ function App() {
   const [stops, setStops] = useState([]);
   const [shapes, setShapes] = useState([]);
   const [hiddenRoutes, setHiddenRoutes] = useState(new Set());
+  const [activeOnly, setActiveOnly] = useState(false);
+  const [activeRouteNames, setActiveRouteNames] = useState(new Set());
 
   useEffect(() => {
     fetch("http://localhost:8000/api/stops")
@@ -21,6 +23,20 @@ function App() {
       .then((data) => setShapes(data.shapes || []))
       .catch((err) => console.error("Failed to load shapes:", err));
   }, []);
+
+  // Periodically fetch active route names when activeOnly is on
+  useEffect(() => {
+    if (!activeOnly) return;
+    const fetchActive = () => {
+      fetch("http://localhost:8000/api/active-routes")
+        .then((res) => res.json())
+        .then((data) => setActiveRouteNames(new Set(data.active_routes || [])))
+        .catch((err) => console.error("Failed to fetch active routes:", err));
+    };
+    fetchActive();
+    const id = setInterval(fetchActive, 15000);
+    return () => clearInterval(id);
+  }, [activeOnly]);
 
   // Derive unique routes (by name) from shapes for the menu list
   const uniqueRoutes = useMemo(() => {
@@ -43,11 +59,30 @@ function App() {
     });
   };
 
+  const handleToggleActiveOnly = useCallback(() => {
+    setActiveOnly((prev) => !prev);
+  }, []);
+
+  // Compute effective hidden routes (respects activeOnly override)
+  const effectiveHidden = useMemo(() => {
+    if (!activeOnly) return hiddenRoutes;
+    // Hide every route that is NOT in the active set
+    const hidden = new Set();
+    for (const route of uniqueRoutes) {
+      if (!activeRouteNames.has(route.name)) {
+        hidden.add(route.name);
+      }
+    }
+    return hidden;
+  }, [activeOnly, hiddenRoutes, uniqueRoutes, activeRouteNames]);
+
   // Only pass shapes whose route is not hidden
   const visibleShapes = useMemo(
     () =>
-      shapes.filter((s) => !hiddenRoutes.has(s.route_name || "Unknown Route")),
-    [shapes, hiddenRoutes],
+      shapes.filter(
+        (s) => !effectiveHidden.has(s.route_name || "Unknown Route"),
+      ),
+    [shapes, effectiveHidden],
   );
 
   const handleStopClick = (stop) => {
@@ -69,11 +104,19 @@ function App() {
       />
       <RouteMenu
         routes={uniqueRoutes}
-        hiddenRoutes={hiddenRoutes}
+        hiddenRoutes={effectiveHidden}
         onToggle={handleToggleRoute}
+        activeOnly={activeOnly}
+        onToggleActiveOnly={handleToggleActiveOnly}
       />
       {selectedStop && (
-        <BusSheet stop={selectedStop} onClose={handleCloseSheet} />
+        <BusSheet
+          stop={selectedStop}
+          onClose={handleCloseSheet}
+          visibleRoutes={uniqueRoutes.filter(
+            (r) => !effectiveHidden.has(r.name),
+          )}
+        />
       )}
     </div>
   );

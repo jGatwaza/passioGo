@@ -184,8 +184,6 @@ def get_stop_status(stop_id: str):
         rid = b['route_id'] or b['route_badge']
         if rid not in seen_routes:
             seen_routes[rid] = b
-        elif 'also_in_min' not in seen_routes[rid]:
-            seen_routes[rid]['also_in_min'] = b['eta_min']
 
     deduped = sorted(seen_routes.values(), key=lambda x: x['eta_min'])
 
@@ -193,6 +191,49 @@ def get_stop_status(stop_id: str):
         "stop_id": stop_id,
         "buses": deduped
     }
+
+
+@app.get("/api/active-routes")
+def get_active_routes():
+    """
+    Returns the list of route names that currently have at least one
+    active realtime trip update (i.e. buses running right now or soon).
+    """
+    global trip_route_map
+    if trip_route_map is None:
+        raise HTTPException(status_code=503, detail="Static data not loaded")
+
+    realtime_data = fetch_realtime_updates()
+    if not realtime_data or "entity" not in realtime_data:
+        return {"active_routes": []}
+
+    now = datetime.now()
+    active_names = set()
+
+    for entity in realtime_data["entity"]:
+        trip_update = entity.get("trip_update")
+        if not trip_update:
+            continue
+
+        trip_id = trip_update.get("trip", {}).get("trip_id")
+        route_info = trip_route_map.get(trip_id, {})
+        route_name = (
+            route_info.get("long_name")
+            or route_info.get("short_name")
+            or "Unknown Route"
+        )
+
+        # Check if the trip has at least one future stop arrival
+        stop_updates = trip_update.get("stop_time_update", [])
+        for upd in stop_updates:
+            arrival = upd.get("arrival")
+            if arrival and "time" in arrival:
+                if datetime.fromtimestamp(arrival["time"]) > now:
+                    active_names.add(route_name)
+                    break
+
+    return {"active_routes": sorted(active_names)}
+
 
 if __name__ == "__main__":
     import uvicorn
