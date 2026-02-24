@@ -265,8 +265,9 @@ def get_stop_schedule_context(stop_id, route_id, eta_dt, schedule_today, full_sc
         delta_sec = 0
 
     # Sanity cap: sparse/irregular matches should not produce wild colors.
+    # Return special sentinel so the caller can flag "off schedule".
     if abs(delta_sec) > max_deviation_anchor_sec:
-        delta_sec = 0
+        delta_sec = float('inf')
 
     past_str    = fmt_time(times[current_idx - 1][0]) if current_idx > 0 else None
     current_str = fmt_time(scheduled_raw)

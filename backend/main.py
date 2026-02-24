@@ -136,10 +136,15 @@ def get_stop_status(stop_id: str):
 
         # determine status (lateness) from the computed delta
         if scheduled_time_str:
-            status, color = determine_status_color(delta)
+            if delta == float('inf') or delta == float('-inf'):
+                status = "Off Schedule"
+                color  = "Black"
+                delta  = 0          # zero out so frontend doesn't show wild numbers
+            else:
+                status, color = determine_status_color(delta)
         else:
-            status = "Scheduled"
-            color = "Green"
+            status = "Off Schedule"
+            color  = "Black"
 
         route_name = route_info.get("long_name") or route_info.get("short_name") or "Unknown Route"
         route_badge = route_info.get("short_name") or "Bus"

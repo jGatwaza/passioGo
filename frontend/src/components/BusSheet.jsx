@@ -70,6 +70,21 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
     };
   }, [stop]);
 
+  const [offSchedPopup, setOffSchedPopup] = useState(null);
+  const offSchedTimer = useRef(null);
+
+  const showOffSchedulePopup = useCallback((bus) => {
+    setOffSchedPopup(bus);
+    if (offSchedTimer.current) clearTimeout(offSchedTimer.current);
+    offSchedTimer.current = setTimeout(() => setOffSchedPopup(null), 6000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (offSchedTimer.current) clearTimeout(offSchedTimer.current);
+    };
+  }, []);
+
   if (!stop) return null;
 
   const getStatusColor = (statusColor) => {
@@ -82,6 +97,8 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
         return "#e67e22";
       case "Red":
         return "#e74c3c";
+      case "Black":
+        return "#1a1a1a";
       default:
         return "#e310d2";
     }
@@ -105,7 +122,12 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
             </span>
           </>
         )}
-        {showTag && (
+        {bus.color === "Black" && expanded && (
+          <span className="eta-status-tag eta-off-schedule" style={{ color }}>
+            Off schedule — still coming
+          </span>
+        )}
+        {bus.color !== "Black" && showTag && (
           <span className="eta-status-tag" style={{ color }}>
             {bus.delta_sec < 0
               ? `${deltaMin} min early`
@@ -179,8 +201,39 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
               <span className="legend-dot" style={{ background: "#e74c3c" }} />
               Very Late
             </span>
+            <span className="legend-item">
+              <span className="legend-dot" style={{ background: "#1a1a1a" }} />
+              Off Schedule
+            </span>
           </div>
         </div>
+
+        {/* Off-schedule popup */}
+        {offSchedPopup && (
+          <div className="off-sched-popup">
+            <div className="off-sched-popup-content">
+              <span className="off-sched-popup-icon">⚠️</span>
+              <div className="off-sched-popup-text">
+                <strong>Schedule unavailable</strong>
+                <span>
+                  The schedule for this bus is unreliable, but Bus{" "}
+                  {offSchedPopup.bus_number} is still on its way — arriving in{" "}
+                  {offSchedPopup.eta_min}{" "}
+                  {offSchedPopup.eta_min === 1 ? "minute" : "minutes"}.
+                </span>
+              </div>
+              <button
+                className="off-sched-popup-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOffSchedPopup(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div
@@ -224,7 +277,12 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
                     <div
                       key={expandKey}
                       className={`bus-item${expanded ? " bus-item--expanded" : ""}`}
-                      onClick={() => toggleExpanded(expandKey)}
+                      onClick={() => {
+                        toggleExpanded(expandKey);
+                        if (bus.color === "Black" && !expanded) {
+                          showOffSchedulePopup(bus);
+                        }
+                      }}
                     >
                       <div
                         className="bus-item-left"
