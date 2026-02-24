@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import "./BusSheet.css";
 
+const ARRIVED_RETENTION_MS = 5 * 60 * 1000;
+
 const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
   const [busData, setBusData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -97,6 +99,69 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
     });
   }, []);
 
+  const getBusRouteKey = useCallback((bus) => {
+    return bus.route_id || bus.route_badge || bus.route_name || bus.trip_id;
+  }, []);
+
+  const mergeWithArrivedRetention = useCallback(
+    (prevBuses, incomingBuses) => {
+      const nowMs = Date.now();
+      const prev = Array.isArray(prevBuses) ? prevBuses : [];
+      const incoming = Array.isArray(incomingBuses) ? incomingBuses : [];
+
+      const incomingWithMeta = incoming.map((bus) => {
+        const key = getBusRouteKey(bus);
+        const prevMatch = prev.find((p) => getBusRouteKey(p) === key);
+        const isArriving = (bus.eta_min ?? 0) <= 0;
+
+        return {
+          ...bus,
+          _stickyArrived: false,
+          _arrivedAtMs: isArriving
+            ? (prevMatch?._arrivedAtMs ?? nowMs)
+            : undefined,
+        };
+      });
+
+      const incomingByKey = new Map(
+        incomingWithMeta.map((bus) => [getBusRouteKey(bus), bus]),
+      );
+
+      const retainedArrived = prev
+        .filter((bus) => {
+          if (!bus?._stickyArrived && (bus.eta_min ?? 0) > 0) return false;
+
+          const key = getBusRouteKey(bus);
+          const latest = incomingByKey.get(key);
+
+          if (latest && (latest.eta_min ?? 0) > 0) {
+            // New ETA has arrived for this route; retire sticky "arrived" card.
+            return false;
+          }
+
+          if (latest && (latest.eta_min ?? 0) <= 0) {
+            // Current payload already includes this bus as arriving.
+            return false;
+          }
+
+          const arrivedAtMs = bus._arrivedAtMs ?? nowMs;
+          if (nowMs - arrivedAtMs > ARRIVED_RETENTION_MS) {
+            return false;
+          }
+
+          return true;
+        })
+        .map((bus) => ({
+          ...bus,
+          eta_min: 0,
+          _stickyArrived: true,
+        }));
+
+      return [...incomingWithMeta, ...retainedArrived];
+    },
+    [getBusRouteKey],
+  );
+
   useEffect(() => {
     if (!stop || !stop.stop_id) return;
     let cancelled = false;
@@ -106,7 +171,9 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
         .then((res) => res.json())
         .then((data) => {
           if (!cancelled) {
-            setBusData(data.buses && data.buses.length > 0 ? data.buses : []);
+            setBusData((prev) =>
+              mergeWithArrivedRetention(prev, data.buses || []),
+            );
             setLoading(false);
           }
         })
@@ -122,7 +189,7 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [stop]);
+  }, [stop, mergeWithArrivedRetention]);
 
   const [offSchedPopup, setOffSchedPopup] = useState(null);
   const offSchedTimer = useRef(null);
@@ -168,7 +235,9 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
     return (
       <div className="bus-eta" style={{ color }}>
         {bus.eta_min <= 0 ? (
-          <span className="eta-number eta-arrived">Arriving</span>
+          <span className="eta-number eta-arrived">
+            {bus._stickyArrived ? "Arrived" : "Arriving"}
+          </span>
         ) : (
           <>
             <span className="eta-number">{displayEta}</span>

@@ -129,27 +129,67 @@ def load_shapes():
             "points": points,
         })
 
-    # Normalize known problematic geometry: some Quad variants can include noisy
-    # shape segments; force them to use the best-defined Crimson Cruiser geometry.
-    crimson_shapes = [
-        s for s in shapes_list
-        if (s.get("route_name") or "").strip().lower() == "crimson cruiser"
-    ]
-    canonical_crimson = max(crimson_shapes, key=lambda s: len(s.get("points", [])), default=None)
+    # Rebuild known problematic routes from canonical shapes.txt geometry.
+    # We pick the most common base shape_id for each route (e.g., 48169 over
+    # 48169.77/48169.108 variants), then draw a single clean polyline.
+    target_route_ids = {"790", "793"}  # Quad Express, Quad Yard Express
+    for route_id in target_route_ids:
+        route_trips = trips_df[
+            (trips_df['route_id'].astype(str) == route_id)
+            & (trips_df['shape_id'].notna())
+        ].copy()
 
-    if canonical_crimson and canonical_crimson.get("points"):
-        crimson_points = [p[:] for p in canonical_crimson["points"]]
-        target_route_names = {"quad yard express", "quad sec direct"}
-        replaced = 0
-        for shape in shapes_list:
-            if (shape.get("route_name") or "").strip().lower() in target_route_names:
-                shape["points"] = [p[:] for p in crimson_points]
-                replaced += 1
-        if replaced:
-            print(
-                f"[INFO] Replaced {replaced} Quad variant shape(s) with Crimson Cruiser geometry.",
-                flush=True,
-            )
+        if route_trips.empty:
+            continue
+
+        route_trips['shape_id'] = route_trips['shape_id'].astype(str)
+        route_trips['shape_base'] = route_trips['shape_id'].str.split('.').str[0]
+
+        base_counts = route_trips['shape_base'].value_counts()
+        canonical_base = str(base_counts.index[0])
+
+        canonical_sid = canonical_base
+        if canonical_sid not in set(shapes_df['shape_id'].astype(str)):
+            canonical_sid = str(route_trips['shape_id'].value_counts().index[0])
+
+        canonical_group = shapes_df[shapes_df['shape_id'].astype(str) == canonical_sid]
+        if canonical_group.empty:
+            continue
+
+        canonical_group = canonical_group.sort_values('shape_pt_sequence')
+        canonical_points = [
+            [float(r['shape_pt_lat']), float(r['shape_pt_lon'])]
+            for _, r in canonical_group.iterrows()
+        ]
+
+        route_row = routes_df[routes_df['route_id'].astype(str) == route_id]
+        if route_row.empty:
+            continue
+
+        route_row = route_row.iloc[0]
+        route_name = (
+            str(route_row['route_long_name']).strip()
+            if pd.notna(route_row['route_long_name']) and str(route_row['route_long_name']).strip()
+            else str(route_row['route_short_name']).strip()
+        )
+        route_color = (
+            f"#{route_row['route_color']}"
+            if pd.notna(route_row['route_color']) and str(route_row['route_color']).strip()
+            else "#888888"
+        )
+
+        shapes_list = [s for s in shapes_list if (s.get('route_name') or "") != route_name]
+        shapes_list.append({
+            "shape_id": f"{canonical_sid}-canonical-{route_id}",
+            "route_name": route_name,
+            "color": route_color,
+            "points": canonical_points,
+        })
+
+        print(
+            f"[INFO] Redrew route {route_name} using canonical shape_id {canonical_sid}.",
+            flush=True,
+        )
 
     print(f"Loaded {len(shapes_list)} route shapes.")
     return shapes_list
