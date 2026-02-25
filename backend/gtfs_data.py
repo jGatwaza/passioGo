@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import re
 from datetime import datetime, timedelta
 
 STATIC_GTFS_DIR = "../static gtfs"
@@ -62,11 +63,45 @@ def load_static_data():
     # stops
     stops_df = pd.read_csv(os.path.join(STATIC_GTFS_DIR, "stops.txt"), dtype={'stop_id': str})
     stops_list = []
+
+    def parse_stop_name_details(stop_name):
+        raw_name = str(stop_name).strip() if pd.notna(stop_name) else "Unknown Stop"
+        match = re.match(r"^(.*?)\s*\((.*?)\)\s*$", raw_name)
+        if not match:
+            return raw_name, None
+
+        base_name = match.group(1).strip() or raw_name
+        detail = match.group(2).strip() or None
+        return base_name, detail
+
     for _, row in stops_df.iterrows():
         if pd.notna(row['stop_lat']) and pd.notna(row['stop_lon']):
+            raw_name = str(row['stop_name']) if pd.notna(row['stop_name']) else "Unknown Stop"
+            building_name, stop_detail = parse_stop_name_details(raw_name)
+
+            stop_desc = None
+            if 'stop_desc' in stops_df.columns and pd.notna(row['stop_desc']):
+                desc = str(row['stop_desc']).strip()
+                stop_desc = desc if desc else None
+
+            stop_code = None
+            if 'stop_code' in stops_df.columns and pd.notna(row['stop_code']):
+                code = str(row['stop_code']).strip()
+                stop_code = code if code else None
+
+            parent_station = None
+            if 'parent_station' in stops_df.columns and pd.notna(row['parent_station']):
+                parent = str(row['parent_station']).strip()
+                parent_station = parent if parent else None
+
             stops_list.append({
                 "stop_id": str(row['stop_id']),
-                "name": str(row['stop_name']) if pd.notna(row['stop_name']) else "Unknown Stop",
+                "name": raw_name,
+                "building_name": building_name,
+                "stop_detail": stop_detail,
+                "description": stop_desc,
+                "stop_code": stop_code,
+                "parent_station": parent_station,
                 "lat": float(row['stop_lat']),
                 "lon": float(row['stop_lon']),
             })
@@ -132,7 +167,7 @@ def load_shapes():
     # Rebuild known problematic routes from canonical shapes.txt geometry.
     # We pick the most common base shape_id for each route (e.g., 48169 over
     # 48169.77/48169.108 variants), then draw a single clean polyline.
-    target_route_ids = {"790", "793"}  # Quad Express, Quad Yard Express
+    target_route_ids = {"790", "793", "2235"}  # Quad Express, Quad Yard Express, Quad SEC Direct
     for route_id in target_route_ids:
         route_trips = trips_df[
             (trips_df['route_id'].astype(str) == route_id)

@@ -33,7 +33,6 @@ trip_service_map   = None
 schedule_today     = None   # schedule filtered to today's active trips
 schedule_today_date = None  # date the filter was last computed
 
-
 def get_schedule_today():
     """Return a schedule DataFrame filtered to today's active trips.
     Re-filters whenever the calendar date advances (midnight rollover)."""

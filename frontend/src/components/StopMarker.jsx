@@ -9,12 +9,21 @@ const createStopIcon = () => {
     html: `<div class="stop-marker-inner">
              <div class="stop-marker-center"></div>
            </div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
   });
 };
 
-const StopMarker = ({ position, name, onClick, isSelected }) => {
+const StopMarker = ({
+  position,
+  name,
+  buildingName,
+  stopDetail,
+  description,
+  stopCode,
+  onClick,
+  isSelected,
+}) => {
   const map = useMap();
 
   const handleClick = () => {
@@ -28,19 +37,22 @@ const StopMarker = ({ position, name, onClick, isSelected }) => {
       icon={createStopIcon()}
       eventHandlers={{ click: handleClick }}
     >
-      {isSelected && (
-        <Tooltip
-          direction="top"
-          offset={[0, -10]}
-          opacity={1}
-          permanent
-          className="custom-stop-tooltip"
-        >
-          <div className="tooltip-content">
-            <span className="stop-name">{name}</span>
-          </div>
-        </Tooltip>
-      )}
+      <Tooltip
+        direction="top"
+        offset={[0, -10]}
+        opacity={1}
+        permanent={isSelected}
+        className="custom-stop-tooltip"
+      >
+        <div className="tooltip-content">
+          <span className="stop-name">{buildingName || name}</span>
+          {stopDetail && <span className="stop-detail">{stopDetail}</span>}
+          {!stopDetail && description && (
+            <span className="stop-description">{description}</span>
+          )}
+          {stopCode && <span className="stop-code">Stop #{stopCode}</span>}
+        </div>
+      </Tooltip>
     </Marker>
   );
 };

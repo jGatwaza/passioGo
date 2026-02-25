@@ -23,11 +23,11 @@ const createBusIcon = (routeColor, bearing) =>
     html: `<div class="bus-marker-shell" style="--route-color:${routeColor};">
              <div class="bus-marker-arrow" style="transform: rotate(${bearing}deg)"></div>
            </div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
   });
 
-const BusMarker = ({ vehicle }) => {
+const BusMarker = ({ vehicle, onClick }) => {
   const markerRef = useRef(null);
   const currentPosRef = useRef({ lat: vehicle.lat, lon: vehicle.lon });
   const [initialPosition] = useState(() => [vehicle.lat, vehicle.lon]);
@@ -85,7 +85,16 @@ const BusMarker = ({ vehicle }) => {
   );
 
   return (
-    <Marker ref={markerRef} position={initialPosition} icon={icon}>
+    <Marker
+      ref={markerRef}
+      position={initialPosition}
+      icon={icon}
+      eventHandlers={{
+        click: () => {
+          if (onClick) onClick(vehicle);
+        },
+      }}
+    >
       <Tooltip direction="top" offset={[0, -14]} opacity={1}>
         <div className="bus-tooltip">
           <div className="bus-tooltip-title">

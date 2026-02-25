@@ -5,6 +5,12 @@ body,
   padding: 0;
   width: 100%;
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
   overflow: hidden;
+}
+
+.leaflet-tile.muted-map-tiles {
+  filter: saturate(0.6) brightness(0.88) contrast(0.92);
 }

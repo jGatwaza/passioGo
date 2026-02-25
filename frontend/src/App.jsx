@@ -4,6 +4,8 @@ import BusSheet from "./components/BusSheet";
 import RouteMenu from "./components/RouteMenu";
 import "./App.css";
 
+const BUS_TIP_DURATION_MS = 6000;
+
 function App() {
   const [selectedStop, setSelectedStop] = useState(null);
   const [stops, setStops] = useState([]);
@@ -14,6 +16,8 @@ function App() {
   const [hiddenRoutes, setHiddenRoutes] = useState(new Set());
   const [activeOnly, setActiveOnly] = useState(false);
   const [activeRouteNames, setActiveRouteNames] = useState(new Set());
+  const [showBusTip, setShowBusTip] = useState(false);
+  const [hasSeenBusTip, setHasSeenBusTip] = useState(false);
 
   useEffect(() => {
     fetch("http://localhost:8000/api/stops")
@@ -137,6 +141,18 @@ function App() {
     setShowRecenter(false);
   }, []);
 
+  useEffect(() => {
+    if (!showBusTip) return;
+    const timerId = setTimeout(() => setShowBusTip(false), BUS_TIP_DURATION_MS);
+    return () => clearTimeout(timerId);
+  }, [showBusTip]);
+
+  const handleBusClick = useCallback(() => {
+    if (hasSeenBusTip) return;
+    setHasSeenBusTip(true);
+    setShowBusTip(true);
+  }, [hasSeenBusTip]);
+
   return (
     <div className="app-container">
       <MapComponent
@@ -144,11 +160,27 @@ function App() {
         shapes={visibleShapes}
         vehicles={visibleVehicles}
         onStopClick={handleStopClick}
+        onBusClick={handleBusClick}
         onMapClick={handleCloseSheet}
         onOutOfBoundsChange={handleOutOfBoundsChange}
         recenterRequestToken={recenterRequestToken}
         selectedStop={selectedStop}
       />
+      {showBusTip && (
+        <div className="bus-tip-banner" role="status" aria-live="polite">
+          <span className="bus-tip-text">
+            Tip: Click any stop to see ETA details for buses on that route.
+          </span>
+          <button
+            type="button"
+            className="bus-tip-close"
+            onClick={() => setShowBusTip(false)}
+            aria-label="Close tip"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {showRecenter && (
         <button
           className={`recenter-btn${selectedStop ? " recenter-btn--above-sheet" : ""}`}

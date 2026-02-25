@@ -225,8 +225,26 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
     }
   };
 
+  const getStatusLabel = (statusColor) => {
+    switch (statusColor) {
+      case "Green":
+        return "On Time";
+      case "Blue":
+        return "Early";
+      case "Orange":
+        return "Late";
+      case "Red":
+        return "Very Late";
+      case "Black":
+        return "Off Schedule";
+      default:
+        return "Status Unknown";
+    }
+  };
+
   const renderEta = (bus, expanded) => {
     const color = getStatusColor(bus.color);
+    const statusLabel = getStatusLabel(bus.color);
     const absDelta = Math.abs(bus.delta_sec);
     const deltaMin = Math.round(absDelta / 60);
     const showTag = expanded && absDelta > 60;
@@ -298,7 +316,16 @@ const BusSheet = ({ stop, onClose, visibleRoutes = [] }) => {
       >
         <div className="sheet-drag-zone" ref={handleRef}>
           <div className="sheet-handle"></div>
-          <div className="stop-name-header">{stop.name}</div>
+          <div
+            className={`stop-name-header${!(stop.stop_detail || stop.description) ? " stop-name-header--with-border" : ""}`}
+          >
+            {stop.building_name || stop.name}
+          </div>
+          {(stop.stop_detail || stop.description) && (
+            <div className="stop-subheader">
+              {stop.stop_detail || stop.description}
+            </div>
+          )}
         </div>
         {/* Column headers + legend */}
         <div className="bus-sheet-col-headers">

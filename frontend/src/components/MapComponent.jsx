@@ -70,6 +70,7 @@ const MapComponent = ({
   shapes = [],
   vehicles = [],
   onStopClick,
+  onBusClick,
   onMapClick,
   onOutOfBoundsChange,
   recenterRequestToken = 0,
@@ -107,9 +108,9 @@ const MapComponent = ({
       zoomControl={false}
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        subdomains="abcd"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        className="muted-map-tiles"
       />
 
       {shapes.map((shape) => (
@@ -129,6 +130,10 @@ const MapComponent = ({
           key={stop.stop_id}
           position={[stop.lat, stop.lon]}
           name={stop.name}
+          buildingName={stop.building_name}
+          stopDetail={stop.stop_detail}
+          description={stop.description}
+          stopCode={stop.stop_code}
           onClick={() => onStopClick(stop)}
           isSelected={selectedStop && selectedStop.stop_id === stop.stop_id}
         />
@@ -138,6 +143,7 @@ const MapComponent = ({
         <BusMarker
           key={`${vehicle.vehicle_id || vehicle.trip_id}-${vehicle.route_id || "route"}`}
           vehicle={vehicle}
+          onClick={onBusClick}
         />
       ))}
 

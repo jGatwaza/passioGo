@@ -75,9 +75,22 @@
   font-weight: 700;
   color: #1a1a1a;
   text-align: center;
-  padding: 0 16px 14px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 0 16px 4px;
   margin-bottom: 0;
+}
+
+.stop-name-header--with-border {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.stop-subheader {
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  text-align: center;
+  padding: 0 16px 12px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .bus-sheet-col-headers {
@@ -274,6 +287,15 @@
   letter-spacing: 0.03em;
   line-height: 1.2;
   margin-top: 2px;
+}
+
+.eta-performance-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  margin-top: 1px;
 }
 
 .eta-also-in {

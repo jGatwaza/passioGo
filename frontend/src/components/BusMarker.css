@@ -2,11 +2,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: default !important;
+}
+
+.custom-bus-icon * {
+  cursor: default !important;
 }
 
 .bus-marker-shell {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--route-color);
   border: 2px solid #ffffff;
@@ -19,9 +24,9 @@
 .bus-marker-arrow {
   width: 0;
   height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-bottom: 11px solid #ffffff;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 8px solid #ffffff;
   transform-origin: center center;
 }
 

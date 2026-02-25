@@ -4,8 +4,8 @@
   justify-content: center;
 }
 .stop-marker-inner {
-  width: 40px;
-  height: 22px;
+  width: 46px;
+  height: 26px;
   background-color: white;
   border-radius: 100%;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
@@ -16,9 +16,9 @@
 }
 
 .stop-marker-center {
-  width: 15px;
-  height: 15px;
-  background-color: #e310d2;
+  width: 18px;
+  height: 18px;
+  background-color: #1f4fbf;
 
   border-radius: 50%;
 }
@@ -28,11 +28,10 @@
   border: none;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   color: white;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
 }
 
 .leaflet-tooltip-top.custom-stop-tooltip::before {
@@ -41,9 +40,31 @@
 
 .tooltip-content {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .stop-name {
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.stop-detail {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.stop-description {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.stop-code {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
 }

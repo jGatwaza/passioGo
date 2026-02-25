@@ -5,6 +5,44 @@
   overflow: hidden;
 }
 
+.bus-tip-banner {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 520px);
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: none;
+  background: #1a1a1a;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+
+.bus-tip-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  line-height: 1.4;
+}
+
+.bus-tip-close {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.bus-tip-close:hover {
+  color: #fff;
+}
+
 .recenter-btn {
   position: fixed;
   left: 20px;
